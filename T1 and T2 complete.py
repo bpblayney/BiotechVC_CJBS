@@ -42,7 +42,7 @@ result=result[~(result['Company Status'].str.contains('Operating Subsidiary') & 
 
 # Plot Biotech companies
 for_plot_T1 = result['Year Founded']
-for_plot_T1.groupby(for_plot_T1).count().plot(kind="bar") #Counts number per year
+for_plot_T1.groupby(for_plot_T1).count().plot(kind="bar") # Counts number per year
 sfont = {'fontname':'Arial'}
 plt.xlabel("Year", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
@@ -74,22 +74,92 @@ plt.tight_layout()
 
 # Start Task 3
 
-mAbs_HitList = ["mAbs", "monoclonal", "antibodies"]
-RDNA_HitList = ["RDNA", "R-DNA", "Recombinant"]
-Antisense_HitList = ["Antisense"]
-GeneTherapy_HitList = ["Gene Therapy"]
-Chemicals_HitList = ["Chemicals"]
+mAbs_HitList = ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]
+RDNA_HitList = ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]
+Antisense_HitList = ["Antisense", "antisense", "3GA"]
+GeneTherapy_HitList = ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies"]
+Chemicals_HitList = ["Chemicals", "chemicals"]
 
 df["All Description"] = df["Business Description"] + df["Long Business Description"] + df["Product Description"] # Possibly need spaces between
 
-is_mAbs = [any(x in str for x in mAbs_HitList) for str in df['All Description']]
-is_RDNA = [any(x in str for x in RDNA_HitList) for str in df['All Description']]
-is_Antisense = [any(x in str for x in Antisense_HitList) for str in df['All Description']]
-is_GeneTherapy = [any(x in str for x in GeneTherapy_HitList) for str in df['All Description']]
-is_Chemicals = [any(x in str for x in Chemicals_HitList) for str in df['All Description']]
-print(is_mAbs)
-print(sum(is_mAbs))
-print(sum(is_RDNA))
-print(sum(is_Antisense))
-print(sum(is_GeneTherapy))
-print(sum(is_Chemicals))
+df["is_mAbs"] = [any(x in str for x in mAbs_HitList) for str in df['All Description']]
+df["is_RDNA"] = [any(x in str for x in RDNA_HitList) for str in df['All Description']]
+df["is_Antisense"] = [any(x in str for x in Antisense_HitList) for str in df['All Description']]
+df["is_GeneTherapy"] = [any(x in str for x in GeneTherapy_HitList) for str in df['All Description']]
+df["is_Chemicals"] = [any(x in str for x in Chemicals_HitList) for str in df['All Description']]
+print(df["is_mAbs"])
+print(sum(df["is_mAbs"]))
+print(sum(df["is_RDNA"]))
+print(sum(df["is_Antisense"]))
+print(sum(df["is_GeneTherapy"]))
+print(sum(df["is_Chemicals"]))
+
+plotT3_mAbs = df[['Year Founded', "is_mAbs"]]
+plotT3_mAbs = plotT3_mAbs.groupby(plotT3_mAbs['Year Founded']).sum()
+plotT3_RDNA = df[['Year Founded', "is_RDNA"]]
+plotT3_RDNA = plotT3_RDNA.groupby(plotT3_RDNA['Year Founded']).sum()
+plotT3_Antisense = df[['Year Founded', "is_Antisense"]]
+plotT3_Antisense = plotT3_Antisense.groupby(plotT3_Antisense['Year Founded']).sum()
+plotT3_GeneTherapy = df[['Year Founded', "is_GeneTherapy"]]
+plotT3_GeneTherapy = plotT3_GeneTherapy.groupby(plotT3_GeneTherapy['Year Founded']).sum()
+plotT3_Chemicals = df[['Year Founded', "is_Chemicals"]]
+plotT3_Chemicals = plotT3_Chemicals.groupby(plotT3_Chemicals['Year Founded']).sum()
+
+T3 = pd.concat([plotT3_mAbs, plotT3_RDNA, plotT3_Antisense, plotT3_GeneTherapy, plotT3_Chemicals], axis=1)
+
+# Plot for Task 3
+fig, ax = subplots()
+T3.plot(kind='bar', stacked=True, ax=ax)
+plt.xlabel("Year", **sfont, fontsize=14)
+plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+plt.title("Biotech Industry", **sfont, fontsize=20)
+ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
+plt.tight_layout()
+
+# Task 4: Clinical development stage
+
+phase0_HitList = ["phase 0"]
+phase1_HitList = ["phase I", "phase 1"]
+phase2_HitList = ["phase II", "phase 2"]
+phase3_HitList = ["phase III", "phase 3"]
+phase4_HitList = ["phase IV", "phase 4"]
+preclinical_HitList = ["preclinical"]
+
+df["is_phase0"] = [any(x in str for x in phase0_HitList) for str in df['All Description']]
+df["is_phase1"] = [any(x in str for x in phase1_HitList) for str in df['All Description']]
+df["is_phase2"] = [any(x in str for x in phase2_HitList) for str in df['All Description']]
+df["is_phase3"] = [any(x in str for x in phase3_HitList) for str in df['All Description']]
+df["is_phase4"] = [any(x in str for x in phase4_HitList) for str in df['All Description']]
+df["is_preclinical"] = [any(x in str for x in preclinical_HitList) for str in df['All Description']]
+
+print(sum(df["is_preclinical"]))
+print(sum(df["is_phase0"]))
+print(sum(df["is_phase1"]))
+print(sum(df["is_phase2"]))
+print(sum(df["is_phase3"]))
+print(sum(df["is_phase4"]))
+
+plotT4_phase0 = df[['Year Founded', "is_phase0"]]
+plotT4_phase0 = plotT4_phase0.groupby(plotT4_phase0['Year Founded']).sum()
+plotT4_phase1 = df[['Year Founded', "is_phase1"]]
+plotT4_phase1 = plotT4_phase1.groupby(plotT4_phase1['Year Founded']).sum()
+plotT4_phase2 = df[['Year Founded', "is_phase2"]]
+plotT4_phase2 = plotT4_phase2.groupby(plotT4_phase2['Year Founded']).sum()
+plotT4_phase3 = df[['Year Founded', "is_phase3"]]
+plotT4_phase3 = plotT4_phase3.groupby(plotT4_phase3['Year Founded']).sum()
+plotT4_phase4 = df[['Year Founded', "is_phase4"]]
+plotT4_phase4 = plotT4_phase4.groupby(plotT4_phase4['Year Founded']).sum()
+plotT4_preclinical = df[['Year Founded', "is_preclinical"]]
+plotT4_preclinical = plotT4_preclinical.groupby(plotT4_preclinical['Year Founded']).sum()
+
+T4 = pd.concat([plotT4_preclinical, plotT4_phase0, plotT4_phase1, plotT4_phase2, plotT4_phase3, plotT4_phase4], axis=1)
+
+# Plot for Task 4
+fig, ax = subplots()
+T4.plot(kind='bar', stacked=True, ax=ax)
+plt.xlabel("Year", **sfont, fontsize=14)
+plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+plt.title("Biotech Industry", **sfont, fontsize=20)
+ax.legend(["Preclinical", "Phase 0", "Phase I", "Phase II", "Phase III", "Phase IV"])
+plt.tight_layout()
+plt.show()
