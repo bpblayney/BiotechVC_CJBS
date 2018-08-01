@@ -15,6 +15,7 @@ sys.path.append(os.path.realpath('..'))
 dirname = sys.path.append(os.path.realpath('..'))
 dfB1 = pd.read_excel('Biotech companies.xls', skiprows=7)
 dfB2 = pd.read_excel('Biotech companies-2.xls', skiprows=7)
+dfEd = pd.read_excel('Educational Background.xls')
 dfB = pd.concat([dfB1, dfB2])
 df = dfB
 
@@ -73,7 +74,6 @@ plt.tight_layout()
 #plt.show()
 
 # Start Task 3
-
 mAbs_HitList = ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]
 RDNA_HitList = ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]
 Antisense_HitList = ["Antisense", "antisense", "3GA"]
@@ -117,7 +117,6 @@ ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
 plt.tight_layout()
 
 # Task 4: Clinical development stage
-
 phase0_HitList = ["phase 0"]
 phase1_HitList = ["phase I", "phase 1"]
 phase2_HitList = ["phase II", "phase 2"]
@@ -162,4 +161,51 @@ plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
 ax.legend(["Preclinical", "Phase 0", "Phase I", "Phase II", "Phase III", "Phase IV"])
 plt.tight_layout()
+plt.show()
+
+# Start Task 5
+
+dfEd['Majors'] = dfEd['Majors'].str.replace('\); ', ')|')
+dfEd['Majors'] = dfEd['Majors'].str.split('|')
+newEd = dfEd[['Company ID', 'Company Name', 'Year Founded', 'Majors']]
+
+newEd2 = (newEd['Majors'].apply(lambda x: pd.Series(x))
+                        .stack()
+                        .reset_index(level=1, drop=True)
+                        .to_frame('Majors')
+                        .join(newEd[['Company ID', 'Company Name', 'Year Founded']], how='left')
+)
+
+newEd2['Company-Person ID'] = np.arange(0, np.size(newEd2, 0)) + 1
+#foo = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)
+#foo1 = foo[0]
+#foo2 = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)[:,1]
+#include all (Prior Board, Deceased)
+newEd2['Person'] = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)[0]
+newEd2['New Majors'] = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)[1]
+newEd2['New Majors'] = newEd2['New Majors'].str.rsplit(')',1,expand=True)[0]
+
+newEd2['New Majors'] = newEd2['New Majors'].str.split('; ')
+newEd2 = newEd2.reset_index(level=0, drop=True)
+
+newEd3 = (newEd2['New Majors'].apply(lambda x: pd.Series(x))
+                        .stack()
+                        .reset_index(level=1, drop=True)
+                        .to_frame('New Majors')
+                        .join(newEd2[['Majors', 'Company ID', 'Company Name', 'Year Founded', 'Company-Person ID', 'Person']], how='left')
+)
+
+newEd3['University'] = newEd3['New Majors'].str.split(' - ', expand=True)[0]
+newEd3['Major'] = newEd3['New Majors'].str.split(' - ', expand=True)[1]
+
+#fig, ax = subplots()
+fig
+newEd3['Major'].value_counts().head(15).plot('bar')
+plt.title("Biotech Industry Majors", **sfont, fontsize=20)
+plt.show()
+
+#fig, ax = subplots()
+fig
+newEd3['University'].value_counts().head(15).plot('bar')
+plt.title("Biotech Industry Universities", **sfont, fontsize=20)
 plt.show()
