@@ -43,7 +43,7 @@ result=result[~(result['Company Status'].str.contains('Operating Subsidiary') & 
 
 # Plot Biotech companies
 for_plot_T1 = result['Year Founded']
-for_plot_T1.groupby(for_plot_T1).count().plot(kind="bar") # Counts number per year
+for_plot_T1.groupby(for_plot_T1).count().plot(kind="bar", color='#ffb81c') # Counts number per year
 sfont = {'fontname':'Arial'}
 plt.xlabel("Year", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
@@ -65,7 +65,7 @@ T2=pd.concat([a, b], axis=1)
 
 # Plot for Task 2
 fig, ax = subplots()
-T2.plot(kind='bar', stacked=True, ax=ax)
+T2.plot(kind='bar', stacked=True, ax=ax, color=['#ffb81c', '#544c41'])
 plt.xlabel("Year", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
@@ -209,3 +209,16 @@ fig
 newEd3['University'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Universities", **sfont, fontsize=20)
 plt.show()
+# For wordcloud
+import os
+from os import path
+from wordcloud import WordCloud
+file_loc = "C:/Users/pc/Desktop/Edback.csv"
+dfwc = pd.read_csv(file_loc, header=0,encoding='latin-1')
+
+bin_words=('Richard', 'Peter', 'University', "University of", "Technology", 'Prior', 'Board', 'of', 'James', 'the', 'The', 'Michael', 'John', 'David', 'State', 'Robert', 'William', 'Thomas','Stephen' ,'Andrew', 'Mark')
+wordcloud = WordCloud( width=800, height=600,  min_font_size=11, stopwords=bin_words, background_color='white',relative_scaling=0.5).generate(' '.join(dfwc['Majors']))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.show()
+
