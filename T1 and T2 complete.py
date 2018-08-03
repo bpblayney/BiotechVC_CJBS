@@ -3,6 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import *
 import sys, os
+import seaborn as sns
+#Check out PyLucene/EnglishAnalyzer for text analysis...
+#Try LSI - latent semantic analysis using nltk in python
+#Try ML for clustering/classification? Naive Bayes...
+#Trial + Error to improve classifications
 
 #Import data
 #file_loc = "C:/Users/pc/Desktop/Btech.csv"
@@ -87,12 +92,7 @@ df["is_RDNA"] = [any(x in str for x in RDNA_HitList) for str in df['All Descript
 df["is_Antisense"] = [any(x in str for x in Antisense_HitList) for str in df['All Description']]
 df["is_GeneTherapy"] = [any(x in str for x in GeneTherapy_HitList) for str in df['All Description']]
 df["is_Chemicals"] = [any(x in str for x in Chemicals_HitList) for str in df['All Description']]
-print(df["is_mAbs"])
-print(sum(df["is_mAbs"]))
-print(sum(df["is_RDNA"]))
-print(sum(df["is_Antisense"]))
-print(sum(df["is_GeneTherapy"]))
-print(sum(df["is_Chemicals"]))
+#foo = df[df["is_mAbs"]]
 
 plotT3_mAbs = df[['Year Founded', "is_mAbs"]]
 plotT3_mAbs = plotT3_mAbs.groupby(plotT3_mAbs['Year Founded']).sum()
@@ -108,6 +108,7 @@ plotT3_Chemicals = plotT3_Chemicals.groupby(plotT3_Chemicals['Year Founded']).su
 T3 = pd.concat([plotT3_mAbs, plotT3_RDNA, plotT3_Antisense, plotT3_GeneTherapy, plotT3_Chemicals], axis=1)
 
 # Plot for Task 3
+sns.set()
 fig, ax = subplots()
 T3.plot(kind='bar', stacked=True, ax=ax)
 plt.xlabel("Year", **sfont, fontsize=14)
@@ -115,6 +116,24 @@ plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
 ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
 plt.tight_layout()
+
+N=4
+T3n = pd.DataFrame(data = np.convolve(T3["is_mAbs"], np.ones((N,))/N, mode='same'),
+                   index = T3.index.values,
+                   columns = ["is_mAbs"])
+T3n["is_RDNA"] = np.convolve(T3["is_RDNA"], np.ones((N,))/N, mode='same')
+T3n["is_Antisense"] = np.convolve(T3["is_Antisense"], np.ones((N,))/N, mode='same')
+T3n["is_GeneTherapy"] = np.convolve(T3["is_GeneTherapy"], np.ones((N,))/N, mode='same')
+T3n["is_Chemicals"] = np.convolve(T3["is_Chemicals"], np.ones((N,))/N, mode='same')
+fig, ax = subplots()
+T3n.plot(kind='line', stacked=False, ax=ax)
+plt.xlabel("Year", **sfont, fontsize=14)
+plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+plt.title("Biotech Industry", **sfont, fontsize=20)
+ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
+plt.tight_layout()
+
+#sns.relplot(x="Year", y="Number of companies", hue=")
 
 # Task 4: Clinical development stage
 phase0_HitList = ["phase 0"]
@@ -209,16 +228,18 @@ fig
 newEd3['University'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Universities", **sfont, fontsize=20)
 plt.show()
-# For wordcloud
-import os
-from os import path
-from wordcloud import WordCloud
-file_loc = "C:/Users/pc/Desktop/Edback.csv"
-dfwc = pd.read_csv(file_loc, header=0,encoding='latin-1')
 
-bin_words=('Richard', 'Peter', 'University', "University of", "Technology", 'Prior', 'Board', 'of', 'James', 'the', 'The', 'Michael', 'John', 'David', 'State', 'Robert', 'William', 'Thomas','Stephen' ,'Andrew', 'Mark')
-wordcloud = WordCloud( width=800, height=600,  min_font_size=11, stopwords=bin_words, background_color='white',relative_scaling=0.5).generate(' '.join(dfwc['Majors']))
-plt.imshow(wordcloud, interpolation='bilinear')
-plt.axis("off")
-plt.show()
+## Don't have file (also don't have wordcloud so maybe he wouldn't be able to run without installing it?)
+## For wordcloud
+#import os
+#from os import path
+#from wordcloud import WordCloud
+#file_loc = "C:/Users/pc/Desktop/Edback.csv"
+#dfwc = pd.read_csv(file_loc, header=0,encoding='latin-1')
+#
+#bin_words=('Richard', 'Peter', 'University', "University of", "Technology", 'Prior', 'Board', 'of', 'James', 'the', 'The', 'Michael', 'John', 'David', 'State', 'Robert', 'William', 'Thomas','Stephen' ,'Andrew', 'Mark')
+#wordcloud = WordCloud( width=800, height=600,  min_font_size=11, stopwords=bin_words, background_color='white',relative_scaling=0.5).generate(' '.join(dfwc['Majors']))
+#plt.imshow(wordcloud, interpolation='bilinear')
+#plt.axis("off")
+#plt.show()
 
