@@ -43,6 +43,10 @@ def Remove_Subsidiaries(df):
 
 df = Remove_Subsidiaries(df)
 
+# ----- Other Processing -----
+df["All Description"] = df["Business Description"] + df["Long Business Description"] + df["Product Description"] # Possibly need spaces between
+AllDesc_OneString = ' '.join(df['All Description'])
+
 # ----- Task 1: Companies by year founded -----
 for_plot_T1 = df['Year Founded']
 for_plot_T1.groupby(for_plot_T1).count().plot(kind="bar", color='#ffb81c') # Counts number per year
@@ -70,159 +74,131 @@ ax.legend(["Private Companies", "Public Companies"])
 plt.tight_layout()
 
 # ----- Task 3: Types of Drug -----
-mAbs_HitList = ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]
-RDNA_HitList = ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]
-Antisense_HitList = ["Antisense", "antisense", "3GA"]
-GeneTherapy_HitList = ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies"]
-Chemicals_HitList = ["Chemicals", "chemicals"]
+# Enter keywords to match here:
+drugTypeKeywords = pd.concat(
+        [pd.DataFrame({'mAbs_keywords': ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]}),
+         pd.DataFrame({'RDNA_keywords': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]}),
+         pd.DataFrame({'antisense_keywords': ["Antisense", "antisense", "3GA"]}),
+         pd.DataFrame({'geneTherapy_keywords': ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies"]}),
+         pd.DataFrame({'chemicals_keywords': ["Chemicals", "chemicals"]})], 
+         axis=1)
 
-df["All Description"] = df["Business Description"] + df["Long Business Description"] + df["Product Description"] # Possibly need spaces between
-AllDesc_OneString = ' '.join(df['All Description'])
+def findHits(df_searchIn, df_searchFor):
+    df_searchFor = df_searchFor[~pd.isnull(df_searchFor)]
+    return [any(x in str for x in df_searchFor) for str in df_searchIn]
 
-df["is_mAbs"] = [any(x in str for x in mAbs_HitList) for str in df['All Description']]
-df["is_RDNA"] = [any(x in str for x in RDNA_HitList) for str in df['All Description']]
-df["is_Antisense"] = [any(x in str for x in Antisense_HitList) for str in df['All Description']]
-df["is_GeneTherapy"] = [any(x in str for x in GeneTherapy_HitList) for str in df['All Description']]
-df["is_Chemicals"] = [any(x in str for x in Chemicals_HitList) for str in df['All Description']]
-#foo = df[df["is_mAbs"]]
+df[drugTypeKeywords.columns] = pd.DataFrame([findHits(df['All Description'], drugTypeKeywords[drug]) for drug in drugTypeKeywords.columns]).T.set_index(df.index)
 
-plotT3_mAbs = df[['Year Founded', "is_mAbs"]]
-plotT3_mAbs = plotT3_mAbs.groupby(plotT3_mAbs['Year Founded']).sum()
-plotT3_RDNA = df[['Year Founded', "is_RDNA"]]
-plotT3_RDNA = plotT3_RDNA.groupby(plotT3_RDNA['Year Founded']).sum()
-plotT3_Antisense = df[['Year Founded', "is_Antisense"]]
-plotT3_Antisense = plotT3_Antisense.groupby(plotT3_Antisense['Year Founded']).sum()
-plotT3_GeneTherapy = df[['Year Founded', "is_GeneTherapy"]]
-plotT3_GeneTherapy = plotT3_GeneTherapy.groupby(plotT3_GeneTherapy['Year Founded']).sum()
-plotT3_Chemicals = df[['Year Founded', "is_Chemicals"]]
-plotT3_Chemicals = plotT3_Chemicals.groupby(plotT3_Chemicals['Year Founded']).sum()
+df_yearGrouped = df.groupby(df['Year Founded']).sum()
+T3 = df_yearGrouped[drugTypeKeywords.columns]
 
-T3 = pd.concat([plotT3_mAbs, plotT3_RDNA, plotT3_Antisense, plotT3_GeneTherapy, plotT3_Chemicals], axis=1)
-
-# Plot for Task 3
+# Bar Graph for Task 3
 sns.set()
 fig, ax = subplots()
-T3.plot(kind='bar', stacked=True, ax=ax)
-plt.xlabel("Year", **sfont, fontsize=14)
+df_yearGrouped[drugTypeKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
+plt.xlabel("Year Founded", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
 ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
 plt.tight_layout()
 
-N=4
-T3n = pd.DataFrame(data = np.convolve(T3["is_mAbs"], np.ones((N,))/N, mode='same'),
-                   index = T3.index.values,
-                   columns = ["is_mAbs"])
-T3n["is_RDNA"] = np.convolve(T3["is_RDNA"], np.ones((N,))/N, mode='same')
-T3n["is_Antisense"] = np.convolve(T3["is_Antisense"], np.ones((N,))/N, mode='same')
-T3n["is_GeneTherapy"] = np.convolve(T3["is_GeneTherapy"], np.ones((N,))/N, mode='same')
-T3n["is_Chemicals"] = np.convolve(T3["is_Chemicals"], np.ones((N,))/N, mode='same')
+# Line Graph for Task 3 (convolution is simply a moving average - for smoothing)
+N = 4
+T3_convolved = pd.DataFrame([np.convolve(df_yearGrouped[drugtype], np.ones((N,))/N, mode='same') for drugtype in drugTypeKeywords.columns]).T.set_index(df_yearGrouped.index)
+T3_convolved.columns = drugTypeKeywords.columns
+
 fig, ax = subplots()
-T3n.plot(kind='line', stacked=False, ax=ax)
-plt.xlabel("Year", **sfont, fontsize=14)
+T3_convolved.plot(kind='line', stacked=False, ax=ax)
+plt.xlabel("Year Founded", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
 ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
 plt.tight_layout()
-
 #sns.relplot(x="Year", y="Number of companies", hue=")
 
-# Task 4: Clinical development stage
-phase0_HitList = ["phase 0"]
-phase1_HitList = ["phase I", "phase 1"]
-phase2_HitList = ["phase II", "phase 2"]
-phase3_HitList = ["phase III", "phase 3"]
-phase4_HitList = ["phase IV", "phase 4"]
-preclinical_HitList = ["preclinical"]
+# ----- Task 4: Clinical development stage -----
+clinDevKeywords = pd.concat(
+        [pd.DataFrame({'preclinical_keywords': ["preclinical"]}),
+         pd.DataFrame({'phase0_keywords': ["phase 0"]}),
+         pd.DataFrame({'phase1_keywords': ["phase I", "phase 1"]}),
+         pd.DataFrame({'phase2_keywords': ["phase II", "phase 2"]}),
+         pd.DataFrame({'phase3_keywords': ["phase III", "phase 3"]}),
+         pd.DataFrame({'phase4_keywords': ["phase IV", "phase 4"]})], 
+         axis=1)
 
-df["is_phase0"] = [any(x in str for x in phase0_HitList) for str in df['All Description']]
-df["is_phase1"] = [any(x in str for x in phase1_HitList) for str in df['All Description']]
-df["is_phase2"] = [any(x in str for x in phase2_HitList) for str in df['All Description']]
-df["is_phase3"] = [any(x in str for x in phase3_HitList) for str in df['All Description']]
-df["is_phase4"] = [any(x in str for x in phase4_HitList) for str in df['All Description']]
-df["is_preclinical"] = [any(x in str for x in preclinical_HitList) for str in df['All Description']]
-
-print(sum(df["is_preclinical"]))
-print(sum(df["is_phase0"]))
-print(sum(df["is_phase1"]))
-print(sum(df["is_phase2"]))
-print(sum(df["is_phase3"]))
-print(sum(df["is_phase4"]))
-
-plotT4_phase0 = df[['Year Founded', "is_phase0"]]
-plotT4_phase0 = plotT4_phase0.groupby(plotT4_phase0['Year Founded']).sum()
-plotT4_phase1 = df[['Year Founded', "is_phase1"]]
-plotT4_phase1 = plotT4_phase1.groupby(plotT4_phase1['Year Founded']).sum()
-plotT4_phase2 = df[['Year Founded', "is_phase2"]]
-plotT4_phase2 = plotT4_phase2.groupby(plotT4_phase2['Year Founded']).sum()
-plotT4_phase3 = df[['Year Founded', "is_phase3"]]
-plotT4_phase3 = plotT4_phase3.groupby(plotT4_phase3['Year Founded']).sum()
-plotT4_phase4 = df[['Year Founded', "is_phase4"]]
-plotT4_phase4 = plotT4_phase4.groupby(plotT4_phase4['Year Founded']).sum()
-plotT4_preclinical = df[['Year Founded', "is_preclinical"]]
-plotT4_preclinical = plotT4_preclinical.groupby(plotT4_preclinical['Year Founded']).sum()
-
-T4 = pd.concat([plotT4_preclinical, plotT4_phase0, plotT4_phase1, plotT4_phase2, plotT4_phase3, plotT4_phase4], axis=1)
+df[clinDevKeywords.columns] = pd.DataFrame([findHits(df['All Description'], clinDevKeywords[phase]) for phase in clinDevKeywords.columns]).T.set_index(df.index)
+df_yearGrouped = df.groupby(df['Year Founded']).sum()
+T4 = df_yearGrouped[clinDevKeywords.columns]
 
 # Plot for Task 4
 fig, ax = subplots()
-T4.plot(kind='bar', stacked=True, ax=ax)
-plt.xlabel("Year", **sfont, fontsize=14)
+df_yearGrouped[clinDevKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
+plt.xlabel("Year Founded", **sfont, fontsize=14)
+plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+plt.title("Biotech Industry", **sfont, fontsize=20)
+ax.legend(["Preclinical", "Phase 0", "Phase I", "Phase II", "Phase III", "Phase IV"])
+plt.tight_layout()
+
+N = 4
+T4_convolved = pd.DataFrame([np.convolve(df_yearGrouped[phase], np.ones((N,))/N, mode='same') for phase in clinDevKeywords.columns]).T.set_index(df_yearGrouped.index)
+T4_convolved.columns = clinDevKeywords.columns
+
+fig, ax = subplots()
+T4_convolved.plot(kind='line', stacked=False, ax=ax)
+plt.xlabel("Year Founded", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
 ax.legend(["Preclinical", "Phase 0", "Phase I", "Phase II", "Phase III", "Phase IV"])
 plt.tight_layout()
 plt.show()
 
-# Start Task 5
+# Might want to show ratios of phases, possibly over time?
 
+# ----- Task 5: Educational background -----
+# Make columns of people, not companies
 dfEd['Majors'] = dfEd['Majors'].str.replace('\); ', ')|')
 dfEd['Majors'] = dfEd['Majors'].str.split('|')
-newEd = dfEd[['Company ID', 'Company Name', 'Year Founded', 'Majors']]
-
-newEd2 = (newEd['Majors'].apply(lambda x: pd.Series(x))
+dfEd_person = (dfEd['Majors'].apply(lambda x: pd.Series(x))
                         .stack()
                         .reset_index(level=1, drop=True)
                         .to_frame('Majors')
-                        .join(newEd[['Company ID', 'Company Name', 'Year Founded']], how='left')
+                        .join(dfEd[['Company ID', 'Company Name', 'Year Founded']], how='left')
 )
+dfEd_person['Company-Person ID'] = np.arange(0, np.size(dfEd_person, 0)) + 1
 
-newEd2['Company-Person ID'] = np.arange(0, np.size(newEd2, 0)) + 1
-#foo = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)
-#foo1 = foo[0]
-#foo2 = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)[:,1]
-#include all (Prior Board, Deceased)
-newEd2['Person'] = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)[0]
-newEd2['New Majors'] = newEd2['Majors'].str.replace('\(Board\)','').str.replace('\(Prior\)','').str.replace('\(Prior Board\)','').str.split('\(', 1, expand=True)[1]
-newEd2['New Majors'] = newEd2['New Majors'].str.rsplit(')',1,expand=True)[0]
+# Tidy up and organize: remove anything between brackets less than 14 characters long such as (Board) or (Prior Board), then split off names from their backgrounds
+dfEd_person['Person'] = dfEd_person['Majors'].str.replace('\(.{,14}\)','').str.split('\(', 1, expand=True)[0]
+dfEd_person['New Majors'] = dfEd_person['Majors'].str.replace('\(.{,14}\)','').str.split('\(', 1, expand=True)[1]
+dfEd_person['New Majors'] = dfEd_person['New Majors'].str.rsplit(')',1,expand=True)[0]
 
-newEd2['New Majors'] = newEd2['New Majors'].str.split('; ')
-newEd2 = newEd2.reset_index(level=0, drop=True)
-
-newEd3 = (newEd2['New Majors'].apply(lambda x: pd.Series(x))
+# Make columns of majors, not people
+dfEd_person['New Majors'] = dfEd_person['New Majors'].str.split('; ')
+dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+dfEd_major = (dfEd_person['New Majors'].apply(lambda x: pd.Series(x))
                         .stack()
                         .reset_index(level=1, drop=True)
                         .to_frame('New Majors')
-                        .join(newEd2[['Majors', 'Company ID', 'Company Name', 'Year Founded', 'Company-Person ID', 'Person']], how='left')
+                        .join(dfEd_person[['Majors', 'Company ID', 'Company Name', 'Year Founded', 'Company-Person ID', 'Person']], how='left')
 )
 
-newEd3['University'] = newEd3['New Majors'].str.split(' - ', expand=True)[0]
-newEd3['Major'] = newEd3['New Majors'].str.split(' - ', expand=True)[1]
+# Split off subjects from universities
+dfEd_major['University'] = dfEd_major['New Majors'].str.split(' - ', expand=True)[0]
+dfEd_major['Major'] = dfEd_major['New Majors'].str.split(' - ', expand=True)[1]
 
+# Plot Bar Charts
 #fig, ax = subplots()
 fig
-newEd3['Major'].value_counts().head(15).plot('bar')
+dfEd_major['Major'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Majors", **sfont, fontsize=20)
 plt.show()
 
 #fig, ax = subplots()
 fig
-newEd3['University'].value_counts().head(15).plot('bar')
+dfEd_major['University'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Universities", **sfont, fontsize=20)
 plt.show()
 
-## Don't have file (also don't have wordcloud so maybe he wouldn't be able to run without installing it?)
-## For wordcloud
+## WordCloud stuff below: need to sort out file and package access
 #import os
 #from os import path
 #from wordcloud import WordCloud
