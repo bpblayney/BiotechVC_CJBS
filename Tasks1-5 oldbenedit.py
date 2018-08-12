@@ -48,16 +48,13 @@ df["All Description"] = df["Business Description"] + df["Long Business Descripti
 AllDesc_OneString = ' '.join(df['All Description'])
 
 # ----- Task 1: Companies by year founded -----
-T1 = df['Year Founded'].groupby(df['Year Founded']).count().to_frame() #For output file
-T1.rename(columns={T1.columns[0]: "Number of Companies"}, inplace=True)
-
-T1.plot(kind="bar", color='#ffb81c') # Counts number per year
+for_plot_T1 = df['Year Founded']
+for_plot_T1.groupby(for_plot_T1).count().plot(kind="bar", color='#ffb81c') # Counts number per year
 sfont = {'fontname':'Arial'}
 plt.xlabel("Year Founded", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 #plt.title("Biotech Industry", **sfont, fontsize=20)
 plt.tight_layout()
-
 
 # ----- Task 2: Public and Private Companies -----
 for_plot_T2 = df[['Year Founded', 'Company Type']]
@@ -66,7 +63,6 @@ for_plot_T2pu = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pu')]
 
 T2 = pd.concat([for_plot_T2pr.groupby(for_plot_T2pr['Year Founded']).count(), 
                 for_plot_T2pu.groupby(for_plot_T2pu['Year Founded']).count()], axis=1)
-T2.columns = ["Private Companies", "Public Companies"]
 
 # Plot for Task 2
 fig, ax = subplots()
@@ -201,14 +197,6 @@ fig
 dfEd_major['University'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Universities", **sfont, fontsize=20)
 plt.show()
-
-#Output writer
-writer = pd.ExcelWriter('output.xlsx')
-T1.to_excel(writer, 'T1')
-T2.to_excel(writer, 'T2')
-T3.to_excel(writer, 'T3')
-T4.to_excel(writer, 'T4')
-writer.save()
 
 ## WordCloud stuff below: need to sort out file and package access
 #import os
