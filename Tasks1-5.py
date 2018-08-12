@@ -29,24 +29,16 @@ AllDesc_OneString = ' '.join(df['All Description'])
 df_all = df
 
 # ----- Top-Level Filtering -----
-#filterOut_caseSensitive = ['LLC', 'Services']
-#filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana']
-#boolIndex_DrugDevTech = np.logical_or([any(x in s for x in filterOut_caseSensitive) for s in df_all['All Description']], 
-#                                      [any(x.lower() in s.lower() for x in filterOut) for s in df_all['All Description']])
-#df_notDrugDevTech = df_all[boolIndex_DrugDevTech]
-#df_DrugDevTech = df_all[np.invert(boolIndex_DrugDevTech)]
-#df = df_DrugDevTech
 def stripNonAlphaNum(text):
     return ' '.join(re.compile(r'\W+', re.UNICODE).split(text))
 
 def norm(text):
     return stripNonAlphaNum(text).lower()
-    
 
 def Remove_notDrugDevTech(df):
     # df must have an "All Description" column
     filterOut_caseSensitive = ['LLC', 'Services']
-    filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana']
+    filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana', 'cannabidiol','Cannabinoid']
     boolIndex_DrugDevTech = np.logical_or([any(x in s for x in filterOut_caseSensitive) for s in df['All Description']], 
                                       [any(norm(x) in norm(s) for x in filterOut) for s in df['All Description']])
     df_notDrugDevTech = df[boolIndex_DrugDevTech]
@@ -85,6 +77,7 @@ df_unitTest["Failed DDT Test"] = np.abs(df_unitTest["IsDDT"] - df_unitTest["Drug
 _, df_unitTest_boolIndex = Remove_Subsidiaries(df_unitTest)
 df_unitTest["IsSub"] = np.invert(df_unitTest_boolIndex)
 df_unitTest["Failed Sub Test"] = np.abs(df_unitTest["IsSub"] - df_unitTest["Subsidiary"]) #1 for failed, 0 for passed
+# Most failures at the moment are companies that include LLC or Services but that definitely develop and manufacture drugs.
 
 # ----- Task 1: Companies by year founded -----
 T1 = df['Year Founded'].groupby(df['Year Founded']).count().to_frame() #For output file
