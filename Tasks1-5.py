@@ -5,6 +5,8 @@ from matplotlib.pyplot import *
 import sys, os
 import seaborn as sns
 import nltk
+import string
+import re
 ## nltk.download()
 
 ## IDEAS
@@ -17,14 +19,42 @@ sys.path.append(os.path.realpath('..'))
 #dirname = sys.path.append(os.path.realpath('..'))
 dfB1 = pd.read_excel('Biotech companies.xls', skiprows=7)
 dfB2 = pd.read_excel('Biotech companies-2.xls', skiprows=7)
+df_unitTest = pd.read_excel('UnitTestSheet.xlsx', skiprows=7)
 dfEd = pd.read_excel('Educational Background.xls')
-df = pd.concat([dfB1, dfB2])
+df = pd.concat([dfB1, dfB2]).reset_index(drop=True)
+
+# ----- Other Processing -----
+df["All Description"] = df[["Company Name", "Business Description", "Long Business Description", "Product Description"]].apply(lambda x: ' || '.join(x), axis=1)
+AllDesc_OneString = ' '.join(df['All Description'])
+df_all = df
 
 # ----- Top-Level Filtering -----
-filterOut_caseSensitive = ['LLC', 'Services']
-filterOut = ['Institute', 'Cannabis', 'Consulting']
-df = df[[not(any(x in s for x in filterOut_caseSensitive)) for s in df['Business Description']]]
-df = df[[not(any(x.lower() in s.lower() for x in filterOut)) for s in df['Business Description']]]
+#filterOut_caseSensitive = ['LLC', 'Services']
+#filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana']
+#boolIndex_DrugDevTech = np.logical_or([any(x in s for x in filterOut_caseSensitive) for s in df_all['All Description']], 
+#                                      [any(x.lower() in s.lower() for x in filterOut) for s in df_all['All Description']])
+#df_notDrugDevTech = df_all[boolIndex_DrugDevTech]
+#df_DrugDevTech = df_all[np.invert(boolIndex_DrugDevTech)]
+#df = df_DrugDevTech
+def stripNonAlphaNum(text):
+    return ' '.join(re.compile(r'\W+', re.UNICODE).split(text))
+
+def norm(text):
+    return stripNonAlphaNum(text).lower()
+    
+
+def Remove_notDrugDevTech(df):
+    # df must have an "All Description" column
+    filterOut_caseSensitive = ['LLC', 'Services']
+    filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana']
+    boolIndex_DrugDevTech = np.logical_or([any(x in s for x in filterOut_caseSensitive) for s in df['All Description']], 
+                                      [any(norm(x) in norm(s) for x in filterOut) for s in df['All Description']])
+    df_notDrugDevTech = df[boolIndex_DrugDevTech]
+    df_DrugDevTech = df[np.invert(boolIndex_DrugDevTech)]
+    return df_DrugDevTech, df_notDrugDevTech, boolIndex_DrugDevTech
+
+df_DrugDevTech, df_notDrugDevTech, _ = Remove_notDrugDevTech(df_all)
+df = df_DrugDevTech
 
 # ----- Remove Subsidiaries -----
 def Remove_Subsidiaries(df):
@@ -34,18 +64,27 @@ def Remove_Subsidiaries(df):
     result.columns.values[-1] = "For Match" # Change final column name
     
     # Find matches
-    result['Success']=[x[0] in x[1] for x in zip(result['For Match'], result['Parent Company'])]
+    result['Success']=[norm(x[0]) in norm(x[1]) for x in zip(result['For Match'], result['Parent Company'])]
     result['Success'] = result['Success'].apply(str)
     
     # Remove matches (remove where both first word matches and is operating subsidiary)
+    boolindex = ~(result['Company Status'].str.contains('Operating Subsidiary') & result['Success'].str.contains('True'))
     result = result[~(result['Company Status'].str.contains('Operating Subsidiary') & result['Success'].str.contains('True'))]
-    return result
+    return result, boolindex
 
-df = Remove_Subsidiaries(df)
+df, _ = Remove_Subsidiaries(df)
 
-# ----- Other Processing -----
-df["All Description"] = df["Business Description"] + df["Long Business Description"] + df["Product Description"] # Possibly need spaces between
-AllDesc_OneString = ' '.join(df['All Description'])
+# ----- Unit Testing -----
+df_unitTest.dropna(subset=["Drug Dev Tech Test", "Subsidiary"], inplace = True, how='all')
+df_unitTest["All Description"] = df_unitTest[["Company Name", "Business Description", "Long Business Description", "Product Description"]].apply(lambda x: ' || '.join(x), axis=1)
+df_unitTest_all = df_unitTest
+df_unitTest_DDT, df_unitTest_nDDT, df_unitTest_boolIndex = Remove_notDrugDevTech(df_unitTest_all)
+df_unitTest["IsDDT"] = np.invert(df_unitTest_boolIndex)
+df_unitTest["Failed DDT Test"] = np.abs(df_unitTest["IsDDT"] - df_unitTest["Drug Dev Tech Test"]) #1 for failed, 0 for passed
+
+_, df_unitTest_boolIndex = Remove_Subsidiaries(df_unitTest)
+df_unitTest["IsSub"] = np.invert(df_unitTest_boolIndex)
+df_unitTest["Failed Sub Test"] = np.abs(df_unitTest["IsSub"] - df_unitTest["Subsidiary"]) #1 for failed, 0 for passed
 
 # ----- Task 1: Companies by year founded -----
 T1 = df['Year Founded'].groupby(df['Year Founded']).count().to_frame() #For output file
@@ -208,6 +247,8 @@ T1.to_excel(writer, 'T1')
 T2.to_excel(writer, 'T2')
 T3.to_excel(writer, 'T3')
 T4.to_excel(writer, 'T4')
+df_DrugDevTech.to_excel(writer, 'Drug Dev&Tech Companies')
+df_notDrugDevTech.to_excel(writer, 'Not Drug Dev&Tech Companies')
 writer.save()
 
 ## WordCloud stuff below: need to sort out file and package access
