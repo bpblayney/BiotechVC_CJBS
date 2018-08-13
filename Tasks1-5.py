@@ -33,7 +33,7 @@ def stripNonAlphaNum(text):
     return ' '.join(re.compile(r'\W+', re.UNICODE).split(text))
 
 def norm(text):
-    return ' '.join(stripNonAlphaNum(text).lower().split())
+    return ''.join(stripNonAlphaNum(text).lower().split())
 
 def Remove_notDrugDevTech(df):
     # df must have an "All Description" column
@@ -121,7 +121,7 @@ drugTypeKeywords = pd.concat(
 
 def findHits(df_searchIn, df_searchFor):
     df_searchFor = df_searchFor[~pd.isnull(df_searchFor)]
-    return [any(x in str for x in df_searchFor) for str in df_searchIn]
+    return [any(norm(x) in norm(str) for x in df_searchFor) for str in df_searchIn]
 
 df[drugTypeKeywords.columns] = pd.DataFrame([findHits(df['All Description'], drugTypeKeywords[drug]) for drug in drugTypeKeywords.columns]).T.set_index(df.index)
 
@@ -163,8 +163,23 @@ clinDevKeywords = pd.concat(
          axis=1)
 
 df[clinDevKeywords.columns] = pd.DataFrame([findHits(df['All Description'], clinDevKeywords[phase]) for phase in clinDevKeywords.columns]).T.set_index(df.index)
+df = df.reset_index(level=0, drop=True)
 df_yearGrouped = df.groupby(df['Year Founded']).sum()
+
+# Attempt to make single column and find latest phase. Really messy for some reason, theres probably a much simpler way...
+def findPhase(keywords):
+    if keywords['phase4_keywords']: return "Phase 4"
+    elif keywords['phase3_keywords']: return "Phase 3"
+    elif keywords['phase2_keywords']: return "Phase 2"
+    elif keywords['phase1_keywords']: return "Phase 1"
+    elif keywords['phase0_keywords']: return "Phase 0"
+    elif keywords['preclinical_keywords']: return "Preclinical"
+    else: return "None"
+
+df["Most Developed Phase"] = [findPhase(df[clinDevKeywords.columns].iloc[ind]) for ind, s in enumerate(df['Company Name'])]
 T4 = df_yearGrouped[clinDevKeywords.columns]
+T4_mostDevelopedPhase = df[['Year Founded','Most Developed Phase']].join(pd.DataFrame(np.ones(len(df['Year Founded'])))).pivot_table(index='Year Founded', columns='Most Developed Phase', aggfunc=sum)
+T4_mostDevelopedPhase.columns = ["None", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Preclinical"]
 
 # Plot for Task 4
 fig, ax = subplots()
@@ -173,6 +188,15 @@ plt.xlabel("Year Founded", **sfont, fontsize=14)
 plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 plt.title("Biotech Industry", **sfont, fontsize=20)
 ax.legend(["Preclinical", "Phase 0", "Phase I", "Phase II", "Phase III", "Phase IV"])
+plt.tight_layout()
+
+# None removed because it was the vast majority of the results
+fig, ax = subplots()
+T4_mostDevelopedPhase[["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Preclinical"]].plot(kind='bar', stacked=True, ax=ax)
+plt.xlabel("Year Founded", **sfont, fontsize=14)
+plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+plt.title("Biotech Industry (Most Developed Phase)", **sfont, fontsize=20)
+ax.legend(T4_mostDevelopedPhase[["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Preclinical"]].columns)
 plt.tight_layout()
 
 N = 4
