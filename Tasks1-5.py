@@ -33,7 +33,7 @@ def stripNonAlphaNum(text):
     return ' '.join(re.compile(r'\W+', re.UNICODE).split(text))
 
 def norm(text):
-    return stripNonAlphaNum(text).lower()
+    return ' '.join(stripNonAlphaNum(text).lower().split())
 
 def Remove_notDrugDevTech(df):
     # df must have an "All Description" column
@@ -191,6 +191,7 @@ plt.show()
 # Might want to show ratios of phases, possibly over time?
 
 # ----- Task 5: Educational background -----
+dfEd = pd.read_excel('Educational Background.xls')
 # Make columns of people, not companies
 dfEd['Majors'] = dfEd['Majors'].str.replace('\); ', ')|')
 dfEd['Majors'] = dfEd['Majors'].str.split('|')
@@ -198,7 +199,7 @@ dfEd_person = (dfEd['Majors'].apply(lambda x: pd.Series(x))
                         .stack()
                         .reset_index(level=1, drop=True)
                         .to_frame('Majors')
-                        .join(dfEd[['Company ID', 'Company Name', 'Year Founded']], how='left')
+                        .join(dfEd[['Company ID', 'Company Name', 'Year Founded', 'Key Executives (Current and Prior)']], how='left')
 )
 dfEd_person['Company-Person ID'] = np.arange(0, np.size(dfEd_person, 0)) + 1
 
@@ -207,9 +208,19 @@ dfEd_person['Person'] = dfEd_person['Majors'].str.replace('\(.{,14}\)','').str.s
 dfEd_person['New Majors'] = dfEd_person['Majors'].str.replace('\(.{,14}\)','').str.split('\(', 1, expand=True)[1]
 dfEd_person['New Majors'] = dfEd_person['New Majors'].str.rsplit(')',1,expand=True)[0]
 
-# Make columns of majors, not people
+
 dfEd_person['New Majors'] = dfEd_person['New Majors'].str.split('; ')
 dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+
+# Filter for only entries where person with majors exists, then work out if a key exec
+dfEd_person['Is Person'] = ['-' != s for s in dfEd_person['Person']]
+dfEd_person = dfEd_person[dfEd_person['Is Person']]
+dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+dfEd_person['Is Key Exec'] = [norm(dfEd_person['Person'][ind]) in norm(s) for ind, s in enumerate(dfEd_person['Key Executives (Current and Prior)'])]
+dfEd_person = dfEd_person[dfEd_person['Is Key Exec']]
+dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+
+# Make columns of majors, not people
 dfEd_major = (dfEd_person['New Majors'].apply(lambda x: pd.Series(x))
                         .stack()
                         .reset_index(level=1, drop=True)
