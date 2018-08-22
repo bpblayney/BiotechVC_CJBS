@@ -130,13 +130,16 @@ ax.legend(["Private Companies", "Public Companies"])
 plt.tight_layout()
 
 # ----- Task 3: Types of Drug -----
+# Convert data to different forms (wideform and longform... don't end up using longform but keeping because useful to know how to do...)
+def to_wideform(df, id_vars="Year Founded", value_vars="Most Developed Phase"): return pd.melt(df, id_vars=id_vars, value_vars=value_vars, value_name=value_vars, var_name="Frequency").groupby([id_vars, value_vars])[value_vars].count().unstack(value_vars)
+
 # Enter keywords to match here:
 drugTypeKeywords = pd.concat(
-        [pd.DataFrame({'mAbs_keywords': ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]}),
-         pd.DataFrame({'RDNA_keywords': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]}),
-         pd.DataFrame({'antisense_keywords': ["Antisense", "antisense", "3GA"]}),
-         pd.DataFrame({'geneTherapy_keywords': ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies"]}),
-         pd.DataFrame({'chemicals_keywords': ["Chemicals", "chemicals"]})], 
+        [pd.DataFrame({'mAbs': ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]}),
+         pd.DataFrame({'RDNA': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]}),
+         pd.DataFrame({'Antisense': ["Antisense", "antisense", "3GA"]}),
+         pd.DataFrame({'Gene Therapy': ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies"]}),
+         pd.DataFrame({'Chemicals': ["Chemicals", "chemicals"]})], 
          axis=1)
 
 def findHits(df_searchIn, df_searchFor):
@@ -148,29 +151,89 @@ df[drugTypeKeywords.columns] = pd.DataFrame([findHits(df['All Description'], dru
 df_yearGrouped = df.groupby(df['Year Founded']).sum()
 T3 = df_yearGrouped[drugTypeKeywords.columns]
 
+def findDrugType(keywords):
+    if sum(keywords) == 2:
+        return "Multiple"
+    elif sum(keywords) == 0:
+        return "None"
+    else:
+        return keywords[keywords].index[0]
+
+# Possible room for speed-up..
+df["Drug Category"] = [findDrugType(df.iloc[ind][drugTypeKeywords.columns]) for ind in range(len(df))]
+
 # Bar Graph for Task 3
-sns.set()
-fig, ax = plt.subplots()
-df_yearGrouped[drugTypeKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
-plt.xlabel("Year Founded", **sfont, fontsize=14)
-plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-plt.title("Biotech Industry", **sfont, fontsize=20)
-ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
-plt.tight_layout()
+#sns.set()
+#fig, ax = plt.subplots()
+#df_yearGrouped[drugTypeKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
+#plt.xlabel("Year Founded", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry", **sfont, fontsize=20)
+#ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
+#plt.tight_layout()
+
+def graph_T3(df, 
+             graphType = 'line', 
+             version=1, # v1 for #companies hit for each category, v2 for all companies counted once (includes "Multiple" category)
+             convolve=True, 
+             countries=["European Developed Markets (Primary)", "United States of America (Primary)", "Canada (Primary)"], 
+             omittedCategories = ['None']):
+    df = df[findHits(df["Geographic Locations"], np.array(countries))]
+    
+    df = df[np.invert(findHits(df["Drug Category"], np.array(omittedCategories)))]
+    if version==1:
+        df_wideform = df.groupby(df['Year Founded']).sum()[drugTypeKeywords.columns]
+    elif version==2:
+        #df = df[np.invert(findHits(df["Drug Category"], np.array(omittedCategories)))]
+        df_wideform = to_wideform(df, "Year Founded", "Drug Category")
+    else:
+        print("Error: version argument must be 1 (default) or 2")
+    
+    if convolve:
+        N = 4
+        T3_sns_convolved = pd.DataFrame([np.convolve(df_wideform[drugtype], np.ones((N,))/N, mode='same') for drugtype in df_wideform.columns]).T.set_index(df_wideform.index)
+        T3_sns_convolved.columns = df_wideform.columns
+    else:
+        T3_sns_convolved = df_wideform
+    
+    caption = re.sub(r"[\(\[].*?[\)\]]", "", ("Countries: " + ", ".join(countries))).replace(" , ", ", ")
+    fig, ax = plt.subplots()
+    sns.set()
+    if graphType == 'bar':
+        df_wideform.plot(kind='bar', stacked=True, ax=ax)
+    elif graphType == 'line':
+        ax = sns.lineplot(data=T3_sns_convolved, dashes=False)
+    else:
+        print("Error: graphType must be either 'bar' or 'line'")
+    plt.xlabel("Year Founded", **sfont, fontsize=14)
+    plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+    plt.title("Biotech Industry (Drug Types)", **sfont, fontsize=16)
+    ax.annotate(caption, (0,0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+    plt.show()
+
+print("look here!")
+graph_T3(df, 'line', 1)
+graph_T3(df, 'line', 2)
+graph_T3(df, 'bar', 1, False)
+graph_T3(df, 'bar', 2, False)
+graph_T3(df, 'line', 1, True, ["European Developed Markets (Primary)"])
+graph_T3(df, 'line', 2, True, ["European Developed Markets (Primary)"])
 
 # Line Graph for Task 3 (convolution is simply a moving average - for smoothing)
-N = 4
-T3_convolved = pd.DataFrame([np.convolve(df_yearGrouped[drugtype], np.ones((N,))/N, mode='same') for drugtype in drugTypeKeywords.columns]).T.set_index(df_yearGrouped.index)
-T3_convolved.columns = drugTypeKeywords.columns
+#N = 4
+#T3_convolved = pd.DataFrame([np.convolve(df_yearGrouped[drugtype], np.ones((N,))/N, mode='same') for drugtype in drugTypeKeywords.columns]).T.set_index(df_yearGrouped.index)
+#T3_convolved.columns = drugTypeKeywords.columns
 
-fig, ax = plt.subplots()
-T3_convolved.plot(kind='line', stacked=False, ax=ax)
-plt.xlabel("Year Founded", **sfont, fontsize=14)
-plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-plt.title("Biotech Industry", **sfont, fontsize=20)
-ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
-plt.tight_layout()
+#fig, ax = plt.subplots()
+#T3_convolved.plot(kind='line', stacked=False, ax=ax)
+#plt.xlabel("Year Founded", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry", **sfont, fontsize=20)
+#ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
+#plt.tight_layout()
 #sns.relplot(x="Year", y="Number of companies", hue=")
+
+
 
 # ----- Task 4: Clinical development stage -----
 # Tried adding "clinical trials" to phase 1 but didnt give intended results...
@@ -198,10 +261,11 @@ df = df.reset_index(level=0, drop=True)
 df_yearGrouped = df.groupby(df['Year Founded']).sum()
 df["Most Developed Phase"] = [findPhase(df[clinDevKeywords.columns].iloc[ind]) for ind, s in enumerate(df['Company Name'])]
 
-# Convert data to different forms (wideform and longform... don't end up using longform but keeping because useful to know how to do...)
-def to_wideform_T4(df, id_vars="Year Founded", value_vars="Most Developed Phase"): return pd.melt(df, id_vars=id_vars, value_vars=value_vars, value_name=value_vars, var_name="Frequency").groupby([id_vars, value_vars])[value_vars].count().unstack(value_vars)
 #T4_sns_wideform = pd.melt(df, id_vars="Year Founded", value_vars="Most Developed Phase", value_name="Most Developed Phase", var_name="Frequency").groupby(['Year Founded', 'Most Developed Phase'])['Most Developed Phase'].count().unstack('Most Developed Phase')
-T4_sns_wideform = to_wideform_T4(df)
+T4_sns_wideform = to_wideform(df)
+# Reorder Columns
+T4_sns_wideform = T4_sns_wideform[list(T4_sns_wideform.columns.values[0:1]) + list(T4_sns_wideform.columns.values[-1:]) + list(T4_sns_wideform.columns.values[1:-1])]
+
 #T4_sns = pd.melt(df, id_vars="Year Founded", value_vars="Most Developed Phase", value_name="Most Developed Phase", var_name="Frequency").groupby(['Year Founded', 'Most Developed Phase'], as_index=False).count()
 #T4_sns = T4_sns[~(T4_sns["Most Developed Phase"]=='None')]
 
@@ -230,9 +294,11 @@ def line_graph_T4(df, omittedPhases, countries, convolve=True):
     df = df[np.invert(findHits(df["Most Developed Phase"], np.array(omittedPhases)))]
     df = df[findHits(df["Geographic Locations"], np.array(countries))]
     # Calculating a moving average
-    df_wideform = to_wideform_T4(df)
-    
+    df_wideform = to_wideform(df)
+    df_wideform = df_wideform[list(df_wideform.columns.values[-1:]) + list(df_wideform.columns.values[0:-1])]
+
     if convolve:
+        N = 4
         T4_sns_convolved = pd.DataFrame([np.convolve(df_wideform[phase], np.ones((N,))/N, mode='same') for phase in df_wideform.columns]).T.set_index(df_wideform.index)
         T4_sns_convolved.columns = df_wideform.columns
     else:
