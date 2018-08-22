@@ -11,13 +11,14 @@ import re
 
 ## ISSUES
 # Too few cases in many plots (e.g. clinical development phases) - not finding enough relevant companies
-# "intends to enter phase X" does come up a lot...
+# "intends to enter phase X" seems to come up semi-frequently..
 
 ## IDEAS
-#Check out PyLucene/EnglishAnalyzer for text analysis...
-#Try LSI - latent semantic analysis using nltk in python
-#Try ML for clustering/classification? Naive Bayes...
-#Trial + Error to improve classifications
+# Check out PyLucene/EnglishAnalyzer for text analysis...
+# Try LSI - latent semantic analysis using nltk in python
+# Try ML for clustering/classification? Naive Bayes..
+### Use current classifications to similarity match to improve completeness of data
+# Trial + Error to improve classifications
 
 ## TO-DO LIST
 # Ensure subsidiaries being removed properly (done), and initial filtering cases...
@@ -73,7 +74,7 @@ def calc_moving_avg(df_wideform, N):
 def Remove_notDrugDevTech(df):
     # df must have an "All Description" column
     filterOut_caseSensitive = ['LLC', 'Services']
-    filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana', 'cannabidiol', 'Cannabinoid', 'Weed']
+    filterOut = ['Institute', 'Cannabis', 'Consulting', 'Marijuana', 'cannabidiol', 'Cannabinoid', 'Weed', 'Hemp']
     boolIndex_DrugDevTech = np.logical_or([any(x in s for x in filterOut_caseSensitive) for s in df['All Description']], 
                                       [any(norm(x) in norm(s) for x in filterOut) for s in df['All Description']])
     df_notDrugDevTech = df[boolIndex_DrugDevTech]
@@ -184,12 +185,14 @@ print(T2_table)
 
 # ----- Task 3: Types of Drug -----
 # drugTypeKeywords can be edited here for better classification
+# mAbs drugs always end in mab, but mab search also finds 'programmable' and 'consumable', 'presumable'....
+# AON for antisense might have similar problems
 drugTypeKeywords = pd.concat(
-        [pd.DataFrame({'mAbs': ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]}),
-         pd.DataFrame({'RDNA': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]}),
-         pd.DataFrame({'Antisense': ["Antisense", "antisense", "3GA"]}),
-         pd.DataFrame({'Gene Therapy': ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies"]}),
-         pd.DataFrame({'Chemicals': ["Chemicals", "chemicals"]})], 
+        [pd.DataFrame({'mAbs': ["mAbs", "monoclonal", "mabs", "monoclonal antibodies", "moAb", "hybridoma", "immunoglobulin", "phage display", "single B cell", "imab", "zumab", "mumab", "amab", "emab", "omab", "tmab", "gumab", "iumab", "cumab", "rumab", "numab", "lumab", "tumab", "xaumab"]}),
+         pd.DataFrame({'RDNA': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant", "chimeric DNA", "molecular cloning", "palindromic sequence"]}),
+         pd.DataFrame({'Antisense': ["Antisense", "antisense", "3GA", "AONs", "oligonucleotides", "siRNA"]}),
+         pd.DataFrame({'Gene Therapy': ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies", "gene transfer", "glybera", "gendicine", "neovasculgen", "gene editing", "SCGT", "GGT"]}),
+         pd.DataFrame({'Chemicals': ["Chemicals", "chemicals", "NBCD", "polypeptide", "liposome",]})], 
          axis=1)
 
 def findDrugType(keywords):
@@ -245,7 +248,7 @@ print(T3_table)
 # ----- Task 4: Clinical development stage -----
 # clinDevKeywords dataframe can be edited here for better classification
 clinDevKeywords = pd.concat(
-        [pd.DataFrame({'preclinical_keywords': ["preclinical"]}),
+        [pd.DataFrame({'preclinical_keywords': ["preclinical", "early development"]}),
          pd.DataFrame({'phase0_keywords': ["phase 0"]}),
          pd.DataFrame({'phase1_keywords': ["phase I", "phase 1", "phase 1a", "phase 1b", "phase Ia", "phase Ib"]}),
          pd.DataFrame({'phase2_keywords': ["phase II", "phase 2", "phase 2a", "phase 2b", "phase IIa", "phase IIb"]}),
