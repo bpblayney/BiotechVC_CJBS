@@ -25,14 +25,14 @@ import re
 #        drug distribution/operations/etc -> filter out, 
 #        drug development but also distribution/operation/marketing -> filter in (provide evidence this exists), 
 #        non-drug -> filter out (how do we ensure this?)
-# Drug-type graph both ways: one company counted multiple times AND company categorized as "multiple" if multiple
-# Geographical breakdown for all tasks
-# Processed dataframe exported as excel output
-# Clear to read dataframe: Standard columns/Public/mAbs/Phase II
+# Drug-type graph both ways: one company counted multiple times AND company categorized as "multiple" if multiple (done)
+# Geographical breakdown for all tasks (done)
+# Processed dataframe exported as excel output (done)
+# Clear to read dataframe: Standard columns/Public/mAbs/Phase II (done)
 # Categorization columns, "other" otherwise (done.. ?)
-# Produce a table for each graph, so can see exact numbers.
+# Produce a table for each graph, so can see exact numbers (done).
 # T5 key executives only (done)
-# Seaborn graphs for all (seaborn cannot do stacked bar)
+# Seaborn graphs for all (seaborn cannot do stacked bar) (done)
 
 
 sys.path.append(os.path.realpath('..'))
@@ -47,14 +47,29 @@ df = pd.concat([dfB1, dfB2]).reset_index(drop=True)
 df["All Description"] = df[["Company Name", "Business Description", "Long Business Description", "Product Description"]].apply(lambda x: ' || '.join(x), axis=1)
 AllDesc_OneString = ' '.join(df['All Description'])
 df_all = df
+allCountries = ["European Developed Markets (Primary)", "United States of America (Primary)", "Canada (Primary)"]
+sfont = {'fontname':'Arial'}
 
-# ----- Top-Level Filtering -----
+# ----- General/Useful Functions -----
 def stripNonAlphaNum(text):
     return ' '.join(re.compile(r'\W+', re.UNICODE).split(text))
 
 def norm(text):
     return ''.join(stripNonAlphaNum(text).lower().split())
 
+# Convert data to different forms (wideform and longform... don't end up using longform but keeping because useful to know how to do...)
+def to_wideform(df, id_vars="Year Founded", value_vars="Most Developed Phase"): return pd.melt(df, id_vars=id_vars, value_vars=value_vars, value_name=value_vars, var_name="Frequency").groupby([id_vars, value_vars])[value_vars].count().unstack(value_vars)
+
+def findHits(df_searchIn, df_searchFor):
+    df_searchFor = df_searchFor[~pd.isnull(df_searchFor)]
+    return [any(norm(x) in norm(str) for x in df_searchFor) for str in df_searchIn]
+
+def calc_moving_avg(df_wideform, N):
+    df_convolved = pd.DataFrame([np.convolve(df_wideform[column], np.ones((N,))/N, mode='same') for column in df_wideform.columns]).T.set_index(df_wideform.index)
+    df_convolved.columns = df_wideform.columns
+    return df_convolved
+
+# ----- Top-Level Filtering -----
 def Remove_notDrugDevTech(df):
     # df must have an "All Description" column
     filterOut_caseSensitive = ['LLC', 'Services']
@@ -65,10 +80,6 @@ def Remove_notDrugDevTech(df):
     df_DrugDevTech = df[np.invert(boolIndex_DrugDevTech)]
     return df_DrugDevTech, df_notDrugDevTech, boolIndex_DrugDevTech
 
-df_DrugDevTech, df_notDrugDevTech, _ = Remove_notDrugDevTech(df_all)
-df = df_DrugDevTech
-
-# ----- Remove Subsidiaries -----
 def Remove_Subsidiaries(df):
     # Get first word of company name to match to parent company
     first_word = df['Company Name'].str.split().str[0] # Note: some company names have commas after - still works but cleaner to remove punctuation
@@ -84,6 +95,8 @@ def Remove_Subsidiaries(df):
     result = result[~(result['Company Status'].str.contains('Operating Subsidiary') & result['Success'].str.contains('True'))]
     return result, boolindex
 
+df_DrugDevTech, df_notDrugDevTech, _ = Remove_notDrugDevTech(df_all)
+df = df_DrugDevTech
 df, _ = Remove_Subsidiaries(df)
 
 # ----- Unit Testing -----
@@ -100,40 +113,77 @@ df_unitTest["Failed Sub Test"] = np.abs(df_unitTest["IsSub"] - df_unitTest["Subs
 # Most failures at the moment are companies that include LLC or Services but that definitely develop and manufacture drugs.
 
 # ----- Task 1: Companies by year founded -----
-T1 = df['Year Founded'].groupby(df['Year Founded']).count().to_frame() #For output file
-T1.rename(columns={T1.columns[0]: "Number of Companies"}, inplace=True)
+def getT1CountryTable(df, countries):
+    T1_table = pd.DataFrame()
+    for country in countries:
+        df_temp = df[findHits(df["Geographic Locations"], np.array(country))]
+        T1_table[country] = df_temp['Year Founded'].groupby(df_temp['Year Founded']).count()
+    return T1_table
 
-T1.plot(kind="bar", color='#ffb81c') # Counts number per year
-sfont = {'fontname':'Arial'}
-plt.xlabel("Year Founded", **sfont, fontsize=14)
-plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-#plt.title("Biotech Industry", **sfont, fontsize=20)
-plt.tight_layout()
+def graph_T1(df, graphType = 'line', countries=allCountries, countryComparison = False):
+    if countryComparison: T1 = getT1CountryTable(df, countries)
+    else:
+        df = df[findHits(df["Geographic Locations"], np.array(countries))]
+        T1 = df['Year Founded'].groupby(df['Year Founded']).count().to_frame() #For output file
+        T1.rename(columns={T1.columns[0]: "Number of Companies"}, inplace=True)
+    caption = re.sub(r"[\(\[].*?[\)\]]", "", ("Countries: " + ", ".join(countries))).replace(" , ", ", ")
+    fig, ax = plt.subplots()
+    if graphType == 'bar':
+        if countryComparison: T1.plot(kind="bar", ax=ax, stacked=True)
+        else: T1.plot(kind="bar", color='#ffb81c', ax=ax, stacked=True) # Counts number per year
+    elif graphType == 'line':
+        ax = sns.lineplot(data=T1, dashes=False)
+    sfont = {'fontname':'Arial'}
+    plt.xlabel("Year Founded", **sfont, fontsize=14)
+    plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+    plt.title("Biotech Industry", **sfont, fontsize=20)
+    ax.annotate(caption, (0,0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+    plt.tight_layout()
+    plt.show()
 
+graph_T1(df, 'bar')
+graph_T1(df, 'bar', ["European Developed Markets (Primary)"])
+graph_T1(df, 'bar', ["United States of America (Primary)"])
+graph_T1(df, 'line', allCountries, True)
+graph_T1(df, 'bar', allCountries, True)
+
+print("Task 1 Table: Total Number of Pharmaceutical Companies")
+T1_table = getT1CountryTable(df, allCountries).fillna(0)
+print(T1_table)
 
 # ----- Task 2: Public and Private Companies -----
-for_plot_T2 = df[['Year Founded', 'Company Type']]
-for_plot_T2pr = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pr')]
-for_plot_T2pu = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pu')]
+def graph_T2(df, countries=allCountries):
+    df = df[findHits(df["Geographic Locations"], np.array(countries))]
+    for_plot_T2 = df[['Year Founded', 'Company Type']]
+    for_plot_T2pr = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pr')]
+    for_plot_T2pu = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pu')]
+    
+    T2 = pd.concat([for_plot_T2pr.groupby(for_plot_T2pr['Year Founded']).count(), 
+                    for_plot_T2pu.groupby(for_plot_T2pu['Year Founded']).count()], axis=1)
+    T2.columns = ["Private Companies", "Public Companies"]
+    
+    # Plot for Task 2
+    caption = re.sub(r"[\(\[].*?[\)\]]", "", ("Countries: " + ", ".join(countries))).replace(" , ", ", ")
+    fig, ax = plt.subplots()
+    T2.plot(kind='bar', stacked=True, ax=ax, color=['#ffb81c', '#544c41'])
+    plt.xlabel("Year", **sfont, fontsize=14)
+    plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+    plt.title("Public and Private Companies", **sfont, fontsize=20)
+    ax.legend(["Private Companies", "Public Companies"])
+    ax.annotate(caption, (0,0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+    plt.tight_layout()
+    plt.show()
+    return T2
 
-T2 = pd.concat([for_plot_T2pr.groupby(for_plot_T2pr['Year Founded']).count(), 
-                for_plot_T2pu.groupby(for_plot_T2pu['Year Founded']).count()], axis=1)
-T2.columns = ["Private Companies", "Public Companies"]
-
-# Plot for Task 2
-fig, ax = plt.subplots()
-T2.plot(kind='bar', stacked=True, ax=ax, color=['#ffb81c', '#544c41'])
-plt.xlabel("Year", **sfont, fontsize=14)
-plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-plt.title("Biotech Industry", **sfont, fontsize=20)
-ax.legend(["Private Companies", "Public Companies"])
-plt.tight_layout()
+graph_T2(df)
+graph_T2(df, ["United States of America (Primary)"])
+graph_T2(df, ["European Developed Markets (Primary)"])
+T2_table = graph_T2(df).fillna(0)
+print("Task 2 Table: Private and Public Companies")
+print(T2_table)
 
 # ----- Task 3: Types of Drug -----
-# Convert data to different forms (wideform and longform... don't end up using longform but keeping because useful to know how to do...)
-def to_wideform(df, id_vars="Year Founded", value_vars="Most Developed Phase"): return pd.melt(df, id_vars=id_vars, value_vars=value_vars, value_name=value_vars, var_name="Frequency").groupby([id_vars, value_vars])[value_vars].count().unstack(value_vars)
-
-# Enter keywords to match here:
+# drugTypeKeywords can be edited here for better classification
 drugTypeKeywords = pd.concat(
         [pd.DataFrame({'mAbs': ["mAbs", "monoclonal", "mabs", "monoclonal antibodies"]}),
          pd.DataFrame({'RDNA': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant"]}),
@@ -142,101 +192,58 @@ drugTypeKeywords = pd.concat(
          pd.DataFrame({'Chemicals': ["Chemicals", "chemicals"]})], 
          axis=1)
 
-def findHits(df_searchIn, df_searchFor):
-    df_searchFor = df_searchFor[~pd.isnull(df_searchFor)]
-    return [any(norm(x) in norm(str) for x in df_searchFor) for str in df_searchIn]
-
-df[drugTypeKeywords.columns] = pd.DataFrame([findHits(df['All Description'], drugTypeKeywords[drug]) for drug in drugTypeKeywords.columns]).T.set_index(df.index)
-
-df_yearGrouped = df.groupby(df['Year Founded']).sum()
-T3 = df_yearGrouped[drugTypeKeywords.columns]
-
 def findDrugType(keywords):
-    if sum(keywords) == 2:
-        return "Multiple"
-    elif sum(keywords) == 0:
-        return "None"
-    else:
-        return keywords[keywords].index[0]
+    if sum(keywords) == 2: return "Multiple"
+    elif sum(keywords) == 0: return "None"
+    else: return keywords[keywords].index[0]
 
 # Possible room for speed-up..
+df[drugTypeKeywords.columns] = pd.DataFrame([findHits(df['All Description'], drugTypeKeywords[drug]) for drug in drugTypeKeywords.columns]).T.set_index(df.index)
 df["Drug Category"] = [findDrugType(df.iloc[ind][drugTypeKeywords.columns]) for ind in range(len(df))]
 
-# Bar Graph for Task 3
-#sns.set()
-#fig, ax = plt.subplots()
-#df_yearGrouped[drugTypeKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
-#plt.xlabel("Year Founded", **sfont, fontsize=14)
-#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-#plt.title("Biotech Industry", **sfont, fontsize=20)
-#ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
-#plt.tight_layout()
-
-def graph_T3(df, 
-             graphType = 'line', 
-             version=1, # v1 for #companies hit for each category, v2 for all companies counted once (includes "Multiple" category)
-             convolve=True, 
-             countries=["European Developed Markets (Primary)", "United States of America (Primary)", "Canada (Primary)"], 
-             omittedCategories = ['None']):
+# v1 for #companies hit for each category, v2 for all companies counted once (includes "Multiple" category)
+def graph_T3(df, graphType = 'line', version=1, moving_avg=True, countries=allCountries, omittedCategories = ['None']):
+    # Filter (country and category), convert to wideform, calculate moving average if necessary
     df = df[findHits(df["Geographic Locations"], np.array(countries))]
-    
     df = df[np.invert(findHits(df["Drug Category"], np.array(omittedCategories)))]
     if version==1:
         df_wideform = df.groupby(df['Year Founded']).sum()[drugTypeKeywords.columns]
     elif version==2:
-        #df = df[np.invert(findHits(df["Drug Category"], np.array(omittedCategories)))]
         df_wideform = to_wideform(df, "Year Founded", "Drug Category")
-    else:
-        print("Error: version argument must be 1 (default) or 2")
+    if moving_avg: df_wideform = calc_moving_avg(df_wideform, 4)
     
-    if convolve:
-        N = 4
-        T3_sns_convolved = pd.DataFrame([np.convolve(df_wideform[drugtype], np.ones((N,))/N, mode='same') for drugtype in df_wideform.columns]).T.set_index(df_wideform.index)
-        T3_sns_convolved.columns = df_wideform.columns
-    else:
-        T3_sns_convolved = df_wideform
-    
+    # Ploting script
     caption = re.sub(r"[\(\[].*?[\)\]]", "", ("Countries: " + ", ".join(countries))).replace(" , ", ", ")
     fig, ax = plt.subplots()
     sns.set()
     if graphType == 'bar':
         df_wideform.plot(kind='bar', stacked=True, ax=ax)
     elif graphType == 'line':
-        ax = sns.lineplot(data=T3_sns_convolved, dashes=False)
-    else:
-        print("Error: graphType must be either 'bar' or 'line'")
+        ax = sns.lineplot(data=df_wideform, dashes=False)
     plt.xlabel("Year Founded", **sfont, fontsize=14)
     plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-    plt.title("Biotech Industry (Drug Types)", **sfont, fontsize=16)
+    plt.title(("Pharmaceutical Categories (v" + str(version) + ")"), **sfont, fontsize=16)
     ax.annotate(caption, (0,0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
     plt.show()
 
-print("look here!")
+# Output
 graph_T3(df, 'line', 1)
 graph_T3(df, 'line', 2)
 graph_T3(df, 'bar', 1, False)
 graph_T3(df, 'bar', 2, False)
+graph_T3(df, 'bar', 2, False, ["European Developed Markets (Primary)"])
+graph_T3(df, 'bar', 2, False, ["United States of America (Primary)"])
 graph_T3(df, 'line', 1, True, ["European Developed Markets (Primary)"])
 graph_T3(df, 'line', 2, True, ["European Developed Markets (Primary)"])
+graph_T3(df, 'line', 2, True, ["United States of America (Primary)"])
 
-# Line Graph for Task 3 (convolution is simply a moving average - for smoothing)
-#N = 4
-#T3_convolved = pd.DataFrame([np.convolve(df_yearGrouped[drugtype], np.ones((N,))/N, mode='same') for drugtype in drugTypeKeywords.columns]).T.set_index(df_yearGrouped.index)
-#T3_convolved.columns = drugTypeKeywords.columns
-
-#fig, ax = plt.subplots()
-#T3_convolved.plot(kind='line', stacked=False, ax=ax)
-#plt.xlabel("Year Founded", **sfont, fontsize=14)
-#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-#plt.title("Biotech Industry", **sfont, fontsize=20)
-#ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
-#plt.tight_layout()
-#sns.relplot(x="Year", y="Number of companies", hue=")
-
-
+T3_table = to_wideform(df, "Year Founded", "Drug Category")
+T3_table = T3_table[list(T3_table.columns.values[4:5]) + list(T3_table.columns.values[3:4]) + list(T3_table.columns.values[0:3]) + list(T3_table.columns.values[5:])].fillna(0)
+print("Task 3 Table: Drug Categories")
+print(T3_table)
 
 # ----- Task 4: Clinical development stage -----
-# Tried adding "clinical trials" to phase 1 but didnt give intended results...
+# clinDevKeywords dataframe can be edited here for better classification
 clinDevKeywords = pd.concat(
         [pd.DataFrame({'preclinical_keywords': ["preclinical"]}),
          pd.DataFrame({'phase0_keywords': ["phase 0"]}),
@@ -245,8 +252,9 @@ clinDevKeywords = pd.concat(
          pd.DataFrame({'phase3_keywords': ["phase III", "phase 3", "phase 3a", "phase 3b"]}),
          pd.DataFrame({'phase4_keywords': ["phase IV", "phase 4"]})], 
          axis=1)
+# Tried adding "clinical trials" to phase 1 but didnt give intended results...
 
-# Attempt to make single column and find latest phase. Really messy for some reason, theres probably a much simpler way...
+# Attempt to make single column and find latest phase. Theres probably a simpler way...
 def findPhase(keywords):
     if keywords['phase4_keywords']: return "Phase IV"
     elif keywords['phase3_keywords']: return "Phase III"
@@ -258,76 +266,55 @@ def findPhase(keywords):
 
 df[clinDevKeywords.columns] = pd.DataFrame([findHits(df['All Description'], clinDevKeywords[phase]) for phase in clinDevKeywords.columns]).T.set_index(df.index)
 df = df.reset_index(level=0, drop=True)
-df_yearGrouped = df.groupby(df['Year Founded']).sum()
-df["Most Developed Phase"] = [findPhase(df[clinDevKeywords.columns].iloc[ind]) for ind, s in enumerate(df['Company Name'])]
+df["Most Developed Phase"] = [findPhase(df.iloc[ind][clinDevKeywords.columns]) for ind in range(len(df))]
 
-#T4_sns_wideform = pd.melt(df, id_vars="Year Founded", value_vars="Most Developed Phase", value_name="Most Developed Phase", var_name="Frequency").groupby(['Year Founded', 'Most Developed Phase'])['Most Developed Phase'].count().unstack('Most Developed Phase')
-T4_sns_wideform = to_wideform(df)
-# Reorder Columns
-T4_sns_wideform = T4_sns_wideform[list(T4_sns_wideform.columns.values[0:1]) + list(T4_sns_wideform.columns.values[-1:]) + list(T4_sns_wideform.columns.values[1:-1])]
-
-#T4_sns = pd.melt(df, id_vars="Year Founded", value_vars="Most Developed Phase", value_name="Most Developed Phase", var_name="Frequency").groupby(['Year Founded', 'Most Developed Phase'], as_index=False).count()
-#T4_sns = T4_sns[~(T4_sns["Most Developed Phase"]=='None')]
-
-# T4 Original Bar Chart
-fig, ax = plt.subplots()
-df_yearGrouped[clinDevKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
-plt.xlabel("Year Founded", **sfont, fontsize=14)
-plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-plt.title("Biotech Industry (Old plot - all mentioned phases)", **sfont, fontsize=20)
-plt.tight_layout()
-
-# T4 'Most Developed Phase Only' Bar Chart
-# None removed because it was the vast majority of the results
-fig, ax = plt.subplots()
-T4_sns_wideform.drop(['None'],axis=1).plot(kind='bar', stacked=True, ax=ax)
-plt.xlabel("Year Founded", **sfont, fontsize=14)
-plt.ylabel("Number of Companies ", **sfont, fontsize=14)
-plt.title("Biotech Industry (Most Developed Phase)", **sfont, fontsize=20)
-plt.tight_layout()
-
-# Table
-print("Task 4 Table: Clinical Development Phases")
-print(T4_sns_wideform)
-
-def line_graph_T4(df, omittedPhases, countries, convolve=True):
+def graph_T4(df, graphType = 'line', moving_avg=True, countries = allCountries, omittedPhases = ['None']):
+    # Filter (phase and country), convert to wideform, reorder columns, convolve if necessary.
     df = df[np.invert(findHits(df["Most Developed Phase"], np.array(omittedPhases)))]
     df = df[findHits(df["Geographic Locations"], np.array(countries))]
-    # Calculating a moving average
-    df_wideform = to_wideform(df)
+    df_wideform = to_wideform(df, "Year Founded", "Most Developed Phase")
     df_wideform = df_wideform[list(df_wideform.columns.values[-1:]) + list(df_wideform.columns.values[0:-1])]
-
-    if convolve:
-        N = 4
-        T4_sns_convolved = pd.DataFrame([np.convolve(df_wideform[phase], np.ones((N,))/N, mode='same') for phase in df_wideform.columns]).T.set_index(df_wideform.index)
-        T4_sns_convolved.columns = df_wideform.columns
-    else:
-        T4_sns_convolved = df_wideform
+    if moving_avg: df_wideform = calc_moving_avg(df_wideform, 4)
     
+    # Plotting script
     caption = re.sub(r"[\(\[].*?[\)\]]", "", ("Countries: " + ", ".join(countries))).replace(" , ", ", ")
-    # T4 Line Graph
     fig, ax = plt.subplots()
     sns.set()
-    ax = sns.lineplot(data=T4_sns_convolved, dashes=False)
-    #ax.set(xlabel='Year Founded', ylabel='Number of Companies')
+    if graphType == 'bar':
+        df_wideform.plot(kind='bar', stacked=True, ax=ax)
+    elif graphType == 'line':
+        ax = sns.lineplot(data=df_wideform, dashes=False)
     plt.xlabel("Year Founded", **sfont, fontsize=14)
     plt.ylabel("Number of Companies ", **sfont, fontsize=14)
     plt.title("Biotech Industry (Most Developed Phase)", **sfont, fontsize=16)
-    ax.annotate(caption, (0,0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-    #plt.tight_layout()
+    ax.annotate(caption, (0,0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
     plt.show()
 
-#dfrrr = df[~(df["Most Developed Phase"]=='None')]
-line_graph_T4(df, ['None'], ["European Developed Markets (Primary)", "United States of America (Primary)", "Canada (Primary)"])
-line_graph_T4(df, ['None'], ["European Developed Markets (Primary)"])
-line_graph_T4(df, ['None'], ["United States of America (Primary)"])
-line_graph_T4(df, ['None'], ["Canada (Primary)"], convolve=False)
+# Output
+graph_T4(df, 'line', True, allCountries)
+graph_T4(df, 'line', True, ["European Developed Markets (Primary)"])
+graph_T4(df, 'line', True, ["United States of America (Primary)"])
+graph_T4(df, 'line', False, ["Canada (Primary)"])
+graph_T4(df, 'bar', False)
+graph_T4(df, 'bar', False, ["European Developed Markets (Primary)"])
+graph_T4(df, 'bar', False, ["United States of America (Primary)"])
+graph_T4(df, 'bar', False, ["Canada (Primary)"])
 # Might want to show ratios of phases, possibly over time?
+
+T4_table = to_wideform(df).fillna(0)
+T4_table = T4_table[list(T4_table.columns.values[0:1]) + list(T4_table.columns.values[-1:]) + list(T4_table.columns.values[1:-1])]
+print("Task 4 Table: Clinical Development Phases")
+print(T4_table)
 
 # ----- Task 5: Educational background -----
 dfEd = pd.read_excel('Educational Background.xls')
 # Make columns of people, not companies
 dfEd['Majors'] = dfEd['Majors'].str.replace('\); ', ')|')
+# Remove significant anomalies that interfere with processing:
+dfEd['Majors'] = dfEd['Majors'].str.replace('University of California - San Diego', 'University of California San Diego')
+dfEd['Majors'] = dfEd['Majors'].str.replace('University of Pennsylvania - The Wharton School', 'University of Pennsylvania The Wharton School')
+dfEd['Majors'] = dfEd['Majors'].str.replace('University of Wisconsin - Madison', 'University of Wisconsin Madison')
+dfEd['Majors'] = dfEd['Majors'].str.replace('New York University - Leonard N. Stern School of Business', 'New York University Leonard N. Stern School of Business')
 dfEd['Majors'] = dfEd['Majors'].str.split('|')
 dfEd_person = (dfEd['Majors'].apply(lambda x: pd.Series(x))
                         .stack()
@@ -367,24 +354,36 @@ dfEd_major['University'] = dfEd_major['New Majors'].str.split(' - ', expand=True
 dfEd_major['Major'] = dfEd_major['New Majors'].str.split(' - ', expand=True)[1]
 
 # Plot Bar Charts
-#fig, ax = subplots()
-fig
+fig, ax = plt.subplots()
 dfEd_major['Major'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Majors", **sfont, fontsize=20)
 plt.show()
 
-#fig, ax = subplots()
-fig
+fig, ax = plt.subplots()
 dfEd_major['University'].value_counts().head(15).plot('bar')
 plt.title("Biotech Industry Universities", **sfont, fontsize=20)
 plt.show()
 
+T5_table = dfEd_major['Major'].value_counts()
+print("Task 5 Table: Key Executive Majors")
+print(T5_table.head(50))
+
+df_output = df[['Company Name', 'Exchange:Ticker', 'Industry Classifications',
+       'Geographic Locations', 'Year Founded',
+       'Company Status', 'Exchanges (All Equity Listings)',
+       'Total Revenue [LTM] ($USDmm, Historical rate)', 'Parent Company',
+       'Long Business Description', 'Business Description',
+       'Product Description', 'Product Name',
+       'Company Type', 'Drug Category', 'Most Developed Phase']]
+
 #Output writer
 writer = pd.ExcelWriter('output.xlsx')
-T1.to_excel(writer, 'T1')
-T2.to_excel(writer, 'T2')
-T3.to_excel(writer, 'T3')
-#T4.to_excel(writer, 'T4')
+T1_table.to_excel(writer, 'T1')
+T2_table.to_excel(writer, 'T2')
+T3_table.to_excel(writer, 'T3')
+T4_table.to_excel(writer, 'T4')
+T5_table.to_excel(writer, 'T5')
+df_output.to_excel(writer, 'Final (cleaned) dataframe')
 df_DrugDevTech.to_excel(writer, 'Drug Dev&Tech Companies')
 df_notDrugDevTech.to_excel(writer, 'Not Drug Dev&Tech Companies')
 writer.save()
@@ -402,3 +401,70 @@ writer.save()
 #plt.axis("off")
 #plt.show()
 
+# Old Junk
+#T1 = df['Year Founded'].groupby(df['Year Founded']).count().to_frame() #For output file
+#T1.rename(columns={T1.columns[0]: "Number of Companies"}, inplace=True)
+
+#T1.plot(kind="bar", color='#ffb81c') # Counts number per year
+#sfont = {'fontname':'Arial'}
+#plt.xlabel("Year Founded", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry", **sfont, fontsize=20)
+#plt.tight_layout()
+
+#for_plot_T2 = df[['Year Founded', 'Company Type']]
+#for_plot_T2pr = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pr')]
+#for_plot_T2pu = for_plot_T2[for_plot_T2['Company Type'].str.contains('Pu')]
+#
+#T2 = pd.concat([for_plot_T2pr.groupby(for_plot_T2pr['Year Founded']).count(), 
+#                for_plot_T2pu.groupby(for_plot_T2pu['Year Founded']).count()], axis=1)
+#T2.columns = ["Private Companies", "Public Companies"]
+
+# Plot for Task 2
+#fig, ax = plt.subplots()
+#T2.plot(kind='bar', stacked=True, ax=ax, color=['#ffb81c', '#544c41'])
+#plt.xlabel("Year", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry", **sfont, fontsize=20)
+#ax.legend(["Private Companies", "Public Companies"])
+#plt.tight_layout()
+
+#df_yearGrouped = df.groupby(df['Year Founded']).sum()
+#T3 = df_yearGrouped[drugTypeKeywords.columns]
+# Bar Graph for Task 3
+#sns.set()
+#fig, ax = plt.subplots()
+#df_yearGrouped[drugTypeKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
+#plt.xlabel("Year Founded", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry", **sfont, fontsize=20)
+#ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
+#plt.tight_layout()
+
+# Line Graph for Task 3 (convolution is simply a moving average - for smoothing)
+#N = 4
+#T3_convolved = pd.DataFrame([np.convolve(df_yearGrouped[drugtype], np.ones((N,))/N, mode='same') for drugtype in drugTypeKeywords.columns]).T.set_index(df_yearGrouped.index)
+#T3_convolved.columns = drugTypeKeywords.columns
+
+#fig, ax = plt.subplots()
+#T3_convolved.plot(kind='line', stacked=False, ax=ax)
+#plt.xlabel("Year Founded", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry", **sfont, fontsize=20)
+#ax.legend(["mAbs", "RDNA", "Antisense", "Gene Therapy", "Chemicals"])
+#plt.tight_layout()
+#sns.relplot(x="Year", y="Number of companies", hue=")
+
+#T4_sns_wideform = pd.melt(df, id_vars="Year Founded", value_vars="Most Developed Phase", value_name="Most Developed Phase", var_name="Frequency").groupby(['Year Founded', 'Most Developed Phase'])['Most Developed Phase'].count().unstack('Most Developed Phase')
+
+#T4_sns_wideform = to_wideform(df)
+#T4_sns = pd.melt(df, id_vars="Year Founded", value_vars="Most Developed Phase", value_name="Most Developed Phase", var_name="Frequency").groupby(['Year Founded', 'Most Developed Phase'], as_index=False).count()
+#T4_sns = T4_sns[~(T4_sns["Most Developed Phase"]=='None')]
+
+# T4 Original Bar Chart
+#fig, ax = plt.subplots()
+#df_yearGrouped[clinDevKeywords.columns].plot(kind='bar', stacked=True, ax=ax)
+#plt.xlabel("Year Founded", **sfont, fontsize=14)
+#plt.ylabel("Number of Companies ", **sfont, fontsize=14)
+#plt.title("Biotech Industry (Old plot - all mentioned phases)", **sfont, fontsize=20)
+#plt.tight_layout()
