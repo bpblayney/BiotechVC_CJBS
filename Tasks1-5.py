@@ -7,6 +7,8 @@ import seaborn as sns
 import nltk
 import string
 import re
+import difflib
+#import fuzzywuzzy
 ## nltk.download()
 
 ## ISSUES
@@ -31,9 +33,18 @@ import re
 # Processed dataframe exported as excel output (done)
 # Clear to read dataframe: Standard columns/Public/mAbs/Phase II (done)
 # Categorization columns, "other" otherwise (done.. ?)
-# Produce a table for each graph, so can see exact numbers (done).
+# Produce a table for each graph, so can see exact numbers (done)
 # T5 key executives only (done)
 # Seaborn graphs for all (seaborn cannot do stacked bar) (done)
+
+## TO-DO LIST 2
+# T5: do not allow an executive of multiple companies to count more than once (done)
+# T5: Only look at educational background of the clean dataset (done)
+# New T4 category: "market" (done)
+# T3 chemicals list (done? needs improvement..)
+# Better T1 filtering (cases 1-5)
+# Improve all classifications - look at ml and nlp techniques.
+
 
 
 sys.path.append(os.path.realpath('..'))
@@ -41,11 +52,12 @@ sys.path.append(os.path.realpath('..'))
 dfB1 = pd.read_excel('Biotech companies.xls', skiprows=7)
 dfB2 = pd.read_excel('Biotech companies-2.xls', skiprows=7)
 df_unitTest = pd.read_excel('UnitTestSheet.xlsx', skiprows=7)
-dfEd = pd.read_excel('Educational Background.xls')
+dfEd = pd.read_excel('Educational Background v3.xls', skiprows=7)
 df = pd.concat([dfB1, dfB2]).reset_index(drop=True)
 
 # ----- Other Processing -----
 df["All Description"] = df[["Company Name", "Business Description", "Long Business Description", "Product Description"]].apply(lambda x: ' || '.join(x), axis=1)
+#dfEd["All Description"] = dfEd[["Company Name", "Business Description", "Long Business Description", "Product Description"]].apply(lambda x: ' || '.join(x), axis=1)
 AllDesc_OneString = ' '.join(df['All Description'])
 df_all = df
 allCountries = ["European Developed Markets (Primary)", "United States of America (Primary)", "Canada (Primary)"]
@@ -99,6 +111,12 @@ def Remove_Subsidiaries(df):
 df_DrugDevTech, df_notDrugDevTech, _ = Remove_notDrugDevTech(df_all)
 df = df_DrugDevTech
 df, _ = Remove_Subsidiaries(df)
+
+dfEd["In Original Dataset"] = dfEd["Company Name"].isin(df["Company Name"])
+# Below does not work because no "Parent Company" information in excel file
+#dfEd_DrugDevTech, dfEd_notDrugDevTech, _ = Remove_notDrugDevTech(dfEd)
+#dfEd = dfEd_DrugDevTech
+#dfEd, _ = Remove_Subsidiaries(dfEd)
 
 # ----- Unit Testing -----
 df_unitTest.dropna(subset=["Drug Dev Tech Test", "Subsidiary"], inplace = True, how='all')
@@ -192,7 +210,7 @@ drugTypeKeywords = pd.concat(
          pd.DataFrame({'RDNA': ["RDNA", "R-DNA", "Recombinant", "rDNA", "r-DNA", "recombinant", "chimeric DNA", "molecular cloning", "palindromic sequence"]}),
          pd.DataFrame({'Antisense': ["Antisense", "antisense", "3GA", "AONs", "oligonucleotides", "siRNA"]}),
          pd.DataFrame({'Gene Therapy': ["Gene Therapy", "gene therapies", "gene therapy", "Gene therapies", "gene transfer", "glybera", "gendicine", "neovasculgen", "gene editing", "SCGT", "GGT"]}),
-         pd.DataFrame({'Chemicals': ["Chemicals", "chemicals", "NBCD", "polypeptide", "liposome",]})], 
+         pd.DataFrame({'Chemicals': [" Chemicals ", " chemicals ", " chemical ", "NBCD", "polypeptide", "liposome", "small molecules", "oral", "orally"]})], 
          axis=1)
 
 def findDrugType(keywords):
@@ -250,16 +268,17 @@ print(T3_table)
 clinDevKeywords = pd.concat(
         [pd.DataFrame({'preclinical_keywords': ["preclinical", "early development"]}),
          pd.DataFrame({'phase0_keywords': ["phase 0"]}),
-         pd.DataFrame({'phase1_keywords': ["phase I", "phase 1", "phase 1a", "phase 1b", "phase Ia", "phase Ib"]}),
-         pd.DataFrame({'phase2_keywords': ["phase II", "phase 2", "phase 2a", "phase 2b", "phase IIa", "phase IIb"]}),
-         pd.DataFrame({'phase3_keywords': ["phase III", "phase 3", "phase 3a", "phase 3b"]}),
-         pd.DataFrame({'phase4_keywords': ["phase IV", "phase 4"]})], 
+         pd.DataFrame({'phase1_keywords': ["phase I", "phase 1", "phase 1a", "phase 1b", "phase Ia", "phase Ib", "phase one"]}),
+         pd.DataFrame({'phase2_keywords': ["phase II", "phase 2", "phase 2a", "phase 2b", "phase IIa", "phase IIb", "phase two"]}),
+         pd.DataFrame({'phase3_keywords': ["phase III", "phase 3", "phase 3a", "phase 3b", "phase three"]}),
+         pd.DataFrame({'market_keywords': ["launched", "FDA approved", "FDA approval", "phase IV", "phase 4", "mature product", "completed phase 3", "completed phase three", "completed phase III"]})], 
          axis=1)
 # Tried adding "clinical trials" to phase 1 but didnt give intended results...
+# market_keywords: "commercializes", "markets" # gives too many false positives if included, but too many true positives left out if not included...
 
 # Attempt to make single column and find latest phase. Theres probably a simpler way...
 def findPhase(keywords):
-    if keywords['phase4_keywords']: return "Phase IV"
+    if keywords['market_keywords']: return "Market"
     elif keywords['phase3_keywords']: return "Phase III"
     elif keywords['phase2_keywords']: return "Phase II"
     elif keywords['phase1_keywords']: return "Phase I"
@@ -310,7 +329,7 @@ print("Task 4 Table: Clinical Development Phases")
 print(T4_table)
 
 # ----- Task 5: Educational background -----
-dfEd = pd.read_excel('Educational Background.xls')
+dfEd = dfEd[dfEd["In Original Dataset"]]
 # Make columns of people, not companies
 dfEd['Majors'] = dfEd['Majors'].str.replace('\); ', ')|')
 # Remove significant anomalies that interfere with processing:
@@ -319,6 +338,7 @@ dfEd['Majors'] = dfEd['Majors'].str.replace('University of Pennsylvania - The Wh
 dfEd['Majors'] = dfEd['Majors'].str.replace('University of Wisconsin - Madison', 'University of Wisconsin Madison')
 dfEd['Majors'] = dfEd['Majors'].str.replace('New York University - Leonard N. Stern School of Business', 'New York University Leonard N. Stern School of Business')
 dfEd['Majors'] = dfEd['Majors'].str.split('|')
+dfEd['Company ID'] = dfEd.index
 dfEd_person = (dfEd['Majors'].apply(lambda x: pd.Series(x))
                         .stack()
                         .reset_index(level=1, drop=True)
@@ -343,6 +363,28 @@ dfEd_person = dfEd_person.reset_index(level=0, drop=True)
 dfEd_person['Is Key Exec'] = [norm(dfEd_person['Person'][ind]) in norm(s) for ind, s in enumerate(dfEd_person['Key Executives (Current and Prior)'])]
 dfEd_person = dfEd_person[dfEd_person['Is Key Exec']]
 dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+
+# Filter out duplicates of people (for people that were key executives at multiple companies)
+# Simple method: only match by normalized name, which is simpler and almost as effective:
+# dfEd_person.drop_duplicates(subset='Person (normalized)', keep='first', inplace=True)
+# The problems that can and probably do happen here are: 
+#     1.) what happens when people share a common name?
+#     2.) what about when a name is changed or spelt differently at different times
+# I have attempted to deal with 1. but not with 2:
+dfEd_person['Person (normalized)'] = [norm(person) for person in dfEd_person['Person']]
+dfEd_person['Duplicate Name'] = dfEd_person.duplicated(subset='Person (normalized)', keep=False) # all repeated names marked as true
+dfEd_person['Duplicate (not first)'] = dfEd_person.duplicated(subset='Person (normalized)', keep="first") # mark all dupes as true except for first occurance
+dfEd_person['Duplicate (first)'] = dfEd_person['Duplicate Name'] & ~(dfEd_person['Duplicate (not first)'])
+dfEd_person['New Majors (normalized)'] = [norm(' '.join(majors)) for majors in dfEd_person['New Majors']]
+dfEd_person_ogs = dfEd_person[dfEd_person['Duplicate (first)']]
+dfEd_person_copies = dfEd_person[dfEd_person['Duplicate (not first)']]
+dfEd_person_copies['Majors Similarity'] = np.nan
+dfEd_person_copies = dfEd_person_copies.reset_index(level=0, drop=True)
+
+dfEd_person_copies['Majors Similarity'] = [difflib.SequenceMatcher(None, entry['New Majors (normalized)'], dfEd_person_ogs.loc[dfEd_person_ogs['Person (normalized)'] == entry['Person (normalized)']]['New Majors (normalized)'].values[0]).ratio() for index, entry in dfEd_person_copies.iterrows()]
+dfEd_person_copies['Same Name Different Person'] = dfEd_person_copies['Majors Similarity'] < 0.45
+
+dfEd_person = pd.concat([dfEd_person_ogs, dfEd_person_copies[dfEd_person_copies['Same Name Different Person']] ,dfEd_person[~dfEd_person['Duplicate Name']]], join="inner")
 
 # Make columns of majors, not people
 dfEd_major = (dfEd_person['New Majors'].apply(lambda x: pd.Series(x))
@@ -370,6 +412,92 @@ plt.show()
 T5_table = dfEd_major['Major'].value_counts()
 print("Task 5 Table: Key Executive Majors")
 print(T5_table.head(50))
+
+# ----- Task 5: Educational background (Degrees not majors)-----
+# This was a quick copy-paste replacing majors for degrees - can be done much more quickly, tidily, and efficiently..
+#dfEd = dfEd[dfEd["In Original Dataset"]]
+# Make columns of people, not companies
+dfEd['Degrees'] = dfEd['Degrees'].str.replace('\); ', ')|')
+# Remove significant anomalies that interfere with processing:
+dfEd['Degrees'] = dfEd['Degrees'].str.replace('University of California - San Diego', 'University of California San Diego')
+dfEd['Degrees'] = dfEd['Degrees'].str.replace('University of Pennsylvania - The Wharton School', 'University of Pennsylvania The Wharton School')
+dfEd['Degrees'] = dfEd['Degrees'].str.replace('University of Wisconsin - Madison', 'University of Wisconsin Madison')
+dfEd['Degrees'] = dfEd['Degrees'].str.replace('New York University - Leonard N. Stern School of Business', 'New York University Leonard N. Stern School of Business')
+dfEd['Degrees'] = dfEd['Degrees'].str.split('|')
+dfEd['Company ID'] = dfEd.index
+dfEd_person = (dfEd['Degrees'].apply(lambda x: pd.Series(x))
+                        .stack()
+                        .reset_index(level=1, drop=True)
+                        .to_frame('Degrees')
+                        .join(dfEd[['Company ID', 'Company Name', 'Year Founded', 'Key Executives (Current and Prior)']], how='left')
+)
+dfEd_person['Company-Person ID'] = np.arange(0, np.size(dfEd_person, 0)) + 1
+
+# Tidy up and organize: remove anything between brackets less than 14 characters long such as (Board) or (Prior Board), then split off names from their backgrounds
+dfEd_person['Person'] = dfEd_person['Degrees'].str.replace('\(.{,14}\)','').str.split('\(', 1, expand=True)[0]
+dfEd_person['New Degrees'] = dfEd_person['Degrees'].str.replace('\(.{,14}\)','').str.split('\(', 1, expand=True)[1]
+dfEd_person['New Degrees'] = dfEd_person['New Degrees'].str.rsplit(')',1,expand=True)[0]
+
+
+dfEd_person['New Degrees'] = dfEd_person['New Degrees'].str.split('; ')
+dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+
+# Filter for only entries where person with majors exists, then work out if a key exec
+dfEd_person['Is Person'] = ['-' != s for s in dfEd_person['Person']]
+dfEd_person = dfEd_person[dfEd_person['Is Person']]
+dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+dfEd_person['Is Key Exec'] = [norm(dfEd_person['Person'][ind]) in norm(s) for ind, s in enumerate(dfEd_person['Key Executives (Current and Prior)'])]
+dfEd_person = dfEd_person[dfEd_person['Is Key Exec']]
+dfEd_person = dfEd_person.reset_index(level=0, drop=True)
+
+# Filter out duplicates of people (for people that were key executives at multiple companies)
+# Simple method: only match by normalized name, which is simpler and almost as effective:
+# dfEd_person.drop_duplicates(subset='Person (normalized)', keep='first', inplace=True)
+# The problems that can and probably do happen here are: 
+#     1.) what happens when people share a common name?
+#     2.) what about when a name is changed or spelt differently at different times
+# I have attempted to deal with 1. but not with 2:
+dfEd_person['Person (normalized)'] = [norm(person) for person in dfEd_person['Person']]
+dfEd_person['Duplicate Name'] = dfEd_person.duplicated(subset='Person (normalized)', keep=False) # all repeated names marked as true
+dfEd_person['Duplicate (not first)'] = dfEd_person.duplicated(subset='Person (normalized)', keep="first") # mark all dupes as true except for first occurance
+dfEd_person['Duplicate (first)'] = dfEd_person['Duplicate Name'] & ~(dfEd_person['Duplicate (not first)'])
+dfEd_person['New Degrees (normalized)'] = [norm(' '.join(degrees)) for degrees in dfEd_person['New Degrees']]
+dfEd_person_ogs = dfEd_person[dfEd_person['Duplicate (first)']]
+dfEd_person_copies = dfEd_person[dfEd_person['Duplicate (not first)']]
+dfEd_person_copies['Degrees Similarity'] = np.nan
+dfEd_person_copies = dfEd_person_copies.reset_index(level=0, drop=True)
+
+dfEd_person_copies['Degrees Similarity'] = [difflib.SequenceMatcher(None, entry['New Degrees (normalized)'], dfEd_person_ogs.loc[dfEd_person_ogs['Person (normalized)'] == entry['Person (normalized)']]['New Degrees (normalized)'].values[0]).ratio() for index, entry in dfEd_person_copies.iterrows()]
+dfEd_person_copies['Same Name Different Person'] = dfEd_person_copies['Degrees Similarity'] < 0.45
+
+dfEd_person = pd.concat([dfEd_person_ogs, dfEd_person_copies[dfEd_person_copies['Same Name Different Person']] ,dfEd_person[~dfEd_person['Duplicate Name']]], join="inner")
+
+# Make columns of majors, not people
+dfEd_degree = (dfEd_person['New Degrees'].apply(lambda x: pd.Series(x))
+                        .stack()
+                        .reset_index(level=1, drop=True)
+                        .to_frame('New Degrees')
+                        .join(dfEd_person[['Degrees', 'Company ID', 'Company Name', 'Year Founded', 'Company-Person ID', 'Person']], how='left')
+)
+
+# Split off subjects from universities
+dfEd_degree['University'] = dfEd_degree['New Degrees'].str.split(' - ', expand=True)[0]
+dfEd_degree['Degrees'] = dfEd_degree['New Degrees'].str.split(' - ', expand=True)[1]
+
+# Plot Bar Charts
+fig, ax = plt.subplots()
+dfEd_degree['Degrees'].value_counts().head(15).plot('bar')
+plt.title("Biotech Industry Degrees", **sfont, fontsize=20)
+plt.show()
+
+#fig, ax = plt.subplots()
+#dfEd_major['University'].value_counts().head(15).plot('bar')
+#plt.title("Biotech Industry Universities", **sfont, fontsize=20)
+#plt.show()
+
+T5_table = dfEd_degree['Degrees'].value_counts()
+print("Task 5 Table: Key Executive Degrees")
+print(T5_table.head(20))
 
 df_output = df[['Company Name', 'Exchange:Ticker', 'Industry Classifications',
        'Geographic Locations', 'Year Founded',
@@ -471,3 +599,12 @@ writer.save()
 #plt.ylabel("Number of Companies ", **sfont, fontsize=14)
 #plt.title("Biotech Industry (Old plot - all mentioned phases)", **sfont, fontsize=20)
 #plt.tight_layout()
+
+#for index, entry in dfEd_person_copies.iterrows():
+#    print("New person:")
+#    print(entry['New Majors (normalized)'])
+#    og_entry = dfEd_person_ogs.loc[dfEd_person_ogs['Person (normalized)'] == entry['Person (normalized)']]
+#    print(og_entry['New Majors (normalized)'].values[0])
+#    fuzzymatch = difflib.SequenceMatcher(None, entry['New Majors (normalized)'], og_entry['New Majors (normalized)'].values[0]).ratio()
+#    print(fuzzymatch)
+#    entry['Majors Similarity'] = fuzzymatch
